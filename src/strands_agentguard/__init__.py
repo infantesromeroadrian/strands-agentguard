@@ -1,5 +1,52 @@
 """Strands AgentGuard security assessment harness."""
 
+from .contracts import (
+    SCHEMA_VERSION,
+    AssessmentResult,
+    AssessmentSummary,
+    AssessmentTimestamps,
+    ExecutionLimits,
+    ExpectedOutcome,
+    ExpectedTrajectory,
+    Finding,
+    McpServerDescriptor,
+    OutcomeAssertion,
+    PermissionSet,
+    RunIdentity,
+    Scenario,
+    ScenarioAction,
+    ScenarioCleanup,
+    ScenarioEvaluator,
+    ScenarioResult,
+    TargetManifest,
+    ToolDescriptor,
+    canonical_json_bytes,
+    canonical_sha256,
+)
+
 __version__ = "0.0.0"
 
-__all__ = ["__version__"]
+__all__ = [
+    "SCHEMA_VERSION",
+    "AssessmentResult",
+    "AssessmentSummary",
+    "AssessmentTimestamps",
+    "ExecutionLimits",
+    "ExpectedOutcome",
+    "ExpectedTrajectory",
+    "Finding",
+    "McpServerDescriptor",
+    "OutcomeAssertion",
+    "PermissionSet",
+    "RunIdentity",
+    "Scenario",
+    "ScenarioAction",
+    "ScenarioCleanup",
+    "ScenarioEvaluator",
+    "ScenarioResult",
+    "TargetManifest",
+    "ToolDescriptor",
+    "__version__",
+    "canonical_json_bytes",
+    "canonical_sha256",
+]

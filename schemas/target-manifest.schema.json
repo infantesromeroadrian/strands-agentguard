@@ -3,6 +3,7 @@
   "$id": "target-manifest.schema.json",
   "title": "Strands AgentGuard TargetManifest",
   "description": "Versioned, closed manifest for one synthetic or read-only assessment target.",
+  "$comment": "Pydantic additionally enforces sorted unique IDs, disjoint permissions, tool-to-MCP membership, and permission classification.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,14 +24,26 @@
     "capabilities",
     "contract_files"
   ],
-  "properties": {
-    "schema_version": {
-      "const": "0.1.0"
-    },
-    "target_id": {
+  "$defs": {
+    "lowerIdentifier": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9._-]{0,63}$"
     },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?($|/))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "permissionList": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/lowerIdentifier"},
+      "uniqueItems": true
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "target_id": {"$ref": "#/$defs/lowerIdentifier"},
     "target_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
@@ -41,43 +54,27 @@
     },
     "candidate_identity": {
       "type": "string",
-      "pattern": "^(?:commit:[0-9a-f]{40}:[0-9a-f]{64}|commit:[0-9a-f]{64}:[0-9a-f]{64}|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
+      "pattern": "^(?:(?:[0-9a-f]{40}|[0-9a-f]{64})|commit:(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}|(?:staged|diff):(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}:[0-9a-f]{64}|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
     },
-    "provenance": {
-      "const": "authored_for_strands_agentguard"
-    },
-    "confidence": {
-      "const": "designed_not_executed"
-    },
-    "synthetic": {
-      "const": true
-    },
-    "real_data": {
-      "const": false
-    },
+    "provenance": {"const": "authored_for_strands_agentguard"},
+    "confidence": {"const": "designed_not_executed"},
+    "synthetic": {"const": true},
+    "real_data": {"const": false},
     "provider": {
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "model_id", "egress"],
       "properties": {
-        "kind": {
-          "const": "deterministic"
-        },
-        "model_id": {
-          "const": "agentguard-deterministic-v0.1.0"
-        },
-        "egress": {
-          "const": false
-        }
+        "kind": {"const": "deterministic"},
+        "model_id": {"const": "agentguard-deterministic-v0.1.0"},
+        "egress": {"const": false}
       }
     },
     "tools": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {
-        "$ref": "schemas/tool-descriptor.schema.json"
-      }
+      "items": {"$ref": "schemas/tool-descriptor.schema.json"}
     },
     "mcp_servers": {
       "type": "array",
@@ -85,21 +82,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "server_id",
-          "transport",
-          "executable_id",
-          "tool_ids",
-          "fingerprint"
-        ],
+        "required": ["server_id", "transport", "executable_id", "tool_ids", "fingerprint"],
         "properties": {
-          "server_id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-          },
-          "transport": {
-            "const": "stdio"
-          },
+          "server_id": {"$ref": "#/$defs/lowerIdentifier"},
+          "transport": {"const": "stdio"},
           "executable_id": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9._-]{0,127}$"
@@ -108,10 +94,7 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-            }
+            "items": {"$ref": "#/$defs/lowerIdentifier"}
           },
           "fingerprint": {
             "type": "string",
@@ -125,15 +108,9 @@
       "additionalProperties": false,
       "required": ["allow", "approval", "deny"],
       "properties": {
-        "allow": {
-          "$ref": "#/$defs/permissionList"
-        },
-        "approval": {
-          "$ref": "#/$defs/permissionList"
-        },
-        "deny": {
-          "$ref": "#/$defs/permissionList"
-        }
+        "allow": {"$ref": "#/$defs/permissionList"},
+        "approval": {"$ref": "#/$defs/permissionList"},
+        "deny": {"$ref": "#/$defs/permissionList"}
       }
     },
     "limits": {
@@ -152,87 +129,30 @@
         "max_effects_per_operation"
       ],
       "properties": {
-        "assessment_timeout_seconds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 120
-        },
-        "node_timeout_seconds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 30
-        },
-        "tool_timeout_seconds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 5
-        },
-        "max_node_executions": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 8
-        },
-        "max_iterations": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 12
-        },
-        "max_total_tool_calls": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 32
-        },
-        "max_calls_per_tool": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 12
-        },
-        "max_specialist_invocations": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 2
-        },
-        "max_handoffs": {
-          "const": 0
-        },
-        "max_effects_per_operation": {
-          "const": 1
-        }
+        "assessment_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+        "node_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 30},
+        "tool_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 5},
+        "max_node_executions": {"type": "integer", "minimum": 1, "maximum": 8},
+        "max_iterations": {"type": "integer", "minimum": 1, "maximum": 12},
+        "max_total_tool_calls": {"type": "integer", "minimum": 1, "maximum": 32},
+        "max_calls_per_tool": {"type": "integer", "minimum": 1, "maximum": 12},
+        "max_specialist_invocations": {"type": "integer", "minimum": 0, "maximum": 2},
+        "max_handoffs": {"const": 0},
+        "max_effects_per_operation": {"const": 1}
       }
     },
     "capabilities": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-      }
+      "items": {"$ref": "#/$defs/lowerIdentifier"}
     },
     "contract_files": {
       "type": "array",
       "minItems": 1,
       "maxItems": 16,
       "uniqueItems": true,
-      "items": {
-        "$ref": "#/$defs/safeRelativePath"
-      }
-    }
-  },
-  "$defs": {
-    "permissionList": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-      }
-    },
-    "safeRelativePath": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 256,
-      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+      "items": {"$ref": "#/$defs/safeRelativePath"}
     }
   }
 }

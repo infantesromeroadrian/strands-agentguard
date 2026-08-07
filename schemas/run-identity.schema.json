@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run-identity.schema.json",
+  "title": "Strands AgentGuard RunIdentity",
+  "description": "Closed v0.1.0 identity for reproducible assessment inputs. identity_digest is SHA-256 of compact, key-sorted UTF-8 JSON excluding identity_digest and without a terminal LF.",
+  "$comment": "Pydantic additionally verifies identity_digest and embedded ignored_oid consistency. Timestamps deliberately live outside this digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "agentguard_candidate",
+    "target_candidate",
+    "ignored_oid",
+    "manifest_sha256",
+    "threat_catalog_version",
+    "threat_catalog_sha256",
+    "config_sha256",
+    "lock_sha256",
+    "python",
+    "os",
+    "architecture",
+    "identity_digest"
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f]+$"
+    },
+    "candidate": {
+      "type": "string",
+      "pattern": "^(?:(?:[0-9a-f]{40}|[0-9a-f]{64})|commit:(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}|(?:staged|diff):(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}:[0-9a-f]{64}|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "run_id": {"$ref": "#/$defs/safeId"},
+    "agentguard_candidate": {"$ref": "#/$defs/candidate"},
+    "target_candidate": {"$ref": "#/$defs/candidate"},
+    "ignored_oid": {"$ref": "#/$defs/sha256"},
+    "manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "threat_catalog_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "threat_catalog_sha256": {"$ref": "#/$defs/sha256"},
+    "config_sha256": {"$ref": "#/$defs/sha256"},
+    "lock_sha256": {"$ref": "#/$defs/sha256"},
+    "python": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[A-Za-z0-9.+-]*)?$"
+    },
+    "os": {"$ref": "#/$defs/safeId"},
+    "architecture": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "identity_digest": {"$ref": "#/$defs/sha256"}
+  }
+}

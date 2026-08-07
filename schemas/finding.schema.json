@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "finding.schema.json",
+  "title": "Strands AgentGuard Finding",
+  "description": "Closed v0.1.0 evidence-backed finding. Status remains OPEN; disposition is explicit and never inferred from severity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "finding_id",
+    "rule_id",
+    "requirement_ids",
+    "scenario_id",
+    "severity",
+    "confidence",
+    "status",
+    "disposition",
+    "title",
+    "evidence_refs",
+    "reproduction",
+    "limitations",
+    "run_id"
+  ],
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f]+$"
+    },
+    "nonEmptyText": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "evidenceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!file:)(?!.*(?:^|/)\\.\\.($|/))[^\\s\\u0000-\\u001f\\u007f\\\\]+$"
+    }
+  },
+  "properties": {
+    "finding_id": {"$ref": "#/$defs/safeId"},
+    "rule_id": {"type": "string", "pattern": "^AG-RULE-[0-9]{3}$"},
+    "requirement_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^AG-(FR|SEC|NFR|DAT)-[0-9]{3}$"}
+    },
+    "scenario_id": {"type": "string", "pattern": "^AG-SCN-[0-9]{3}$"},
+    "severity": {
+      "type": "string",
+      "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["CONFIRMED", "PROBABLE", "POSSIBLE"]
+    },
+    "status": {"const": "OPEN"},
+    "disposition": {
+      "enum": [
+        null,
+        "MITIGATED",
+        "ACCEPTED_RISK",
+        "FALSE_POSITIVE",
+        "DUPLICATE",
+        "OUT_OF_SCOPE",
+        "NOT_REPRODUCIBLE"
+      ]
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/evidenceRef"}
+    },
+    "reproduction": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/nonEmptyText"}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/nonEmptyText"}
+    },
+    "run_id": {"$ref": "#/$defs/safeId"}
+  }
+}

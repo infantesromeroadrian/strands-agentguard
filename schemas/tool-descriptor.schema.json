@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "tool-descriptor.schema.json",
   "title": "Strands AgentGuard ToolDescriptor",
-  "description": "Closed description of one tool exposed by a target or synthetic MCP server.",
+  "description": "Closed v0.1.0 description of one tool. fingerprint is SHA-256 of compact, key-sorted UTF-8 JSON for {name, description, input_schema}, including one terminal LF.",
+  "$comment": "Pydantic additionally verifies the fingerprint value against the canonical material.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -31,7 +32,12 @@
       "maxLength": 512
     },
     "input_schema": {
-      "type": "object"
+      "type": "object",
+      "required": ["type", "additionalProperties"],
+      "properties": {
+        "type": {"const": "object"},
+        "additionalProperties": {"const": false}
+      }
     },
     "origin": {
       "type": "string",
@@ -45,9 +51,7 @@
       "type": "string",
       "enum": ["NONE", "READ", "SIMULATED_WRITE"]
     },
-    "approval_required": {
-      "type": "boolean"
-    },
+    "approval_required": {"type": "boolean"},
     "fingerprint": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
@@ -56,38 +60,25 @@
   "allOf": [
     {
       "if": {
-        "properties": {
-          "permission_class": {
-            "const": "SIMULATED_SENSITIVE_APPROVAL"
-          }
-        },
+        "properties": {"permission_class": {"const": "SIMULATED_SENSITIVE_APPROVAL"}},
         "required": ["permission_class"]
       },
       "then": {
         "properties": {
-          "approval_required": {
-            "const": true
-          }
+          "approval_required": {"const": true},
+          "effect_class": {"const": "SIMULATED_WRITE"}
         }
       }
     },
     {
       "if": {
-        "properties": {
-          "permission_class": {
-            "const": "DENIED"
-          }
-        },
+        "properties": {"permission_class": {"const": "DENIED"}},
         "required": ["permission_class"]
       },
       "then": {
         "properties": {
-          "effect_class": {
-            "const": "NONE"
-          },
-          "approval_required": {
-            "const": false
-          }
+          "approval_required": {"const": false},
+          "effect_class": {"const": "NONE"}
         }
       }
     }

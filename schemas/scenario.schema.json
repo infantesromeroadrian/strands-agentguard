@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "scenario.schema.json",
   "title": "Strands AgentGuard Scenario",
-  "description": "Closed, synthetic assessment scenario with an expected trajectory and evidence contract.",
+  "description": "Closed v0.1.0 synthetic assessment scenario with a predeclared expected trajectory, outcome, evidence, and cleanup contract.",
+  "$comment": "Pydantic additionally checks fixture_ref against scenario_id and disjoint required/forbidden events.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,165 +26,6 @@
     "cleanup",
     "evaluator"
   ],
-  "properties": {
-    "schema_version": {
-      "const": "0.1.0"
-    },
-    "scenario_id": {
-      "type": "string",
-      "pattern": "^AG-SCN-[0-9]{3}$"
-    },
-    "version": {
-      "const": "0.1.0"
-    },
-    "kind": {
-      "type": "string",
-      "enum": ["benign", "adversarial", "chaos"]
-    },
-    "threat_ids": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^AG-THR-[0-9]{3}$"
-      }
-    },
-    "fixture_ref": {
-      "$ref": "#/$defs/safeRelativePath"
-    },
-    "provenance": {
-      "const": "authored_for_strands_agentguard"
-    },
-    "confidence": {
-      "const": "designed_not_executed"
-    },
-    "synthetic": {
-      "const": true
-    },
-    "real_data": {
-      "const": false
-    },
-    "preconditions": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 256
-      }
-    },
-    "action": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["operation", "input"],
-      "properties": {
-        "operation": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-        },
-        "input": {
-          "type": "object"
-        }
-      }
-    },
-    "expected_trajectory": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["required_order", "forbidden_events"],
-      "properties": {
-        "required_order": {
-          "$ref": "#/$defs/eventList"
-        },
-        "forbidden_events": {
-          "$ref": "#/$defs/eventList"
-        }
-      }
-    },
-    "expected_outcome": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["summary", "assertions"],
-      "properties": {
-        "summary": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 512
-        },
-        "assertions": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["field", "operator", "value"],
-            "properties": {
-              "field": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9._-]{0,127}$"
-              },
-              "operator": {
-                "type": "string",
-                "enum": ["absent", "contains", "equals", "less_than_or_equal", "present"]
-              },
-              "value": true
-            }
-          }
-        }
-      }
-    },
-    "forbidden_effects": {
-      "type": "array",
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-      }
-    },
-    "evidence_required": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9._-]{0,63}$"
-      }
-    },
-    "cleanup": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["mode", "verify"],
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": ["none", "sandbox"]
-        },
-        "verify": {
-          "type": "boolean"
-        }
-      }
-    },
-    "evaluator": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["deterministic_rules", "semantic"],
-      "properties": {
-        "deterministic_rules": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^AG-RULE-[0-9]{3}$"
-          }
-        },
-        "semantic": {
-          "const": false
-        }
-      }
-    }
-  },
   "$defs": {
     "eventList": {
       "type": "array",
@@ -197,7 +39,102 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
-      "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9._/-]+$"
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?($|/))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "scenario_id": {"type": "string", "pattern": "^AG-SCN-[0-9]{3}$"},
+    "version": {"const": "0.1.0"},
+    "kind": {"type": "string", "enum": ["benign", "adversarial", "chaos"]},
+    "threat_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^AG-THR-[0-9]{3}$"}
+    },
+    "fixture_ref": {"$ref": "#/$defs/safeRelativePath"},
+    "provenance": {"const": "authored_for_strands_agentguard"},
+    "confidence": {"const": "designed_not_executed"},
+    "synthetic": {"const": true},
+    "real_data": {"const": false},
+    "preconditions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 1024}
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "input"],
+      "properties": {
+        "operation": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"},
+        "input": {"type": "object"}
+      }
+    },
+    "expected_trajectory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_order", "forbidden_events"],
+      "properties": {
+        "required_order": {
+          "allOf": [{"$ref": "#/$defs/eventList"}, {"minItems": 1}]
+        },
+        "forbidden_events": {"$ref": "#/$defs/eventList"}
+      }
+    },
+    "expected_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "assertions"],
+      "properties": {
+        "summary": {"type": "string", "minLength": 1, "maxLength": 512},
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "operator", "value"],
+            "properties": {
+              "field": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$"},
+              "operator": {
+                "type": "string",
+                "enum": ["absent", "contains", "equals", "less_than_or_equal", "present"]
+              },
+              "value": true
+            }
+          }
+        }
+      }
+    },
+    "forbidden_effects": {"$ref": "#/$defs/eventList"},
+    "evidence_required": {
+      "allOf": [{"$ref": "#/$defs/eventList"}, {"minItems": 1}]
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "verify"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["none", "sandbox"]},
+        "verify": {"const": true}
+      }
+    },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deterministic_rules", "semantic"],
+      "properties": {
+        "deterministic_rules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^AG-RULE-[0-9]{3}$"}
+        },
+        "semantic": {"const": false}
+      }
     }
   }
 }

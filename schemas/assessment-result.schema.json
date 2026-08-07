@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "assessment-result.schema.json",
+  "title": "Strands AgentGuard AssessmentResult",
+  "description": "Closed v0.1.0 source result with explicit incomplete state, addressable evidence, and hashed artifacts.",
+  "$comment": "Pydantic additionally checks temporal order, run/scenario/finding references, and summary completion coherence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_identity",
+    "target_id",
+    "timestamps",
+    "stop_reason",
+    "scenario_results",
+    "findings",
+    "metrics",
+    "artifact_hashes",
+    "summary"
+  ],
+  "$defs": {
+    "safeId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f]+$"
+    },
+    "safeReason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f](?:[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f])?$"
+    },
+    "nonEmptyText": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "evidenceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!file:)(?!.*(?:^|/)\\.\\.($|/))[^\\s\\u0000-\\u001f\\u007f\\\\]+$"
+    },
+    "safeRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?($|/))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "scenarioResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "completed",
+        "passed",
+        "incomplete_reason",
+        "evidence_refs",
+        "finding_ids"
+      ],
+      "properties": {
+        "scenario_id": {"type": "string", "pattern": "^AG-SCN-[0-9]{3}$"},
+        "completed": {"type": "boolean"},
+        "passed": {"type": ["boolean", "null"]},
+        "incomplete_reason": {
+          "anyOf": [{"$ref": "#/$defs/nonEmptyText"}, {"type": "null"}]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/evidenceRef"}
+        },
+        "finding_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/safeId"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"completed": {"const": true}}, "required": ["completed"]},
+          "then": {
+            "properties": {
+              "passed": {"type": "boolean"},
+              "incomplete_reason": {"type": "null"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"completed": {"const": false}}, "required": ["completed"]},
+          "then": {
+            "properties": {
+              "passed": {"type": "null"},
+              "incomplete_reason": {"$ref": "#/$defs/nonEmptyText"}
+            }
+          }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "run_identity": {"$ref": "schemas/run-identity.schema.json"},
+    "target_id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"},
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at", "completed_at"],
+      "properties": {
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "stop_reason": {"$ref": "#/$defs/safeReason"},
+    "scenario_results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/scenarioResult"}
+    },
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "schemas/finding.schema.json"}
+    },
+    "metrics": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z][a-z0-9._-]{0,63}$"},
+      "additionalProperties": {"type": "number", "minimum": 0}
+    },
+    "artifact_hashes": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/safeRelativePath"},
+      "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed", "incomplete_reason"],
+      "properties": {
+        "completed": {"type": "boolean"},
+        "incomplete_reason": {
+          "anyOf": [{"$ref": "#/$defs/nonEmptyText"}, {"type": "null"}]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"completed": {"const": true}}, "required": ["completed"]},
+          "then": {"properties": {"incomplete_reason": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"completed": {"const": false}}, "required": ["completed"]},
+          "then": {"properties": {"incomplete_reason": {"$ref": "#/$defs/nonEmptyText"}}}
+        }
+      ]
+    }
+  }
+}
