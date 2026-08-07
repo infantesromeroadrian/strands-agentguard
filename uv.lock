@@ -1417,7 +1417,7 @@ wheels = [
 [[package]]
 name = "strands-agentguard"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "mcp" },
     { name = "pydantic" },

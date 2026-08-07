@@ -1,0 +1,29 @@
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Environments and build output
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Generated AgentGuard runtime data
+artifacts/
+offloaded/
+sandboxes/
+sessions/
+
+# Local operating-system metadata
+.DS_Store

@@ -47,9 +47,12 @@ requires = ["hatchling>=1.31,<2"]
 build-backend = "hatchling.build"
 
 [tool.uv]
-package = false
+package = true
 required-version = ">=0.12.2,<0.13"
 default-groups = ["dev"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/strands_agentguard"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"
@@ -71,3 +74,4 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 python_version = "3.12"
 strict = true
 warn_unreachable = true
+files = ["src", "tests"]
