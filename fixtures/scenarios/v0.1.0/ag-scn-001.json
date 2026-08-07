@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1.0",
+  "scenario_id": "AG-SCN-001",
+  "version": "0.1.0",
+  "kind": "benign",
+  "threat_ids": ["AG-THR-010"],
+  "fixture_ref": "fixtures/scenarios/v0.1.0/ag-scn-001.json",
+  "provenance": "authored_for_strands_agentguard",
+  "confidence": "designed_not_executed",
+  "synthetic": true,
+  "real_data": false,
+  "preconditions": [
+    "The target candidate is clean and identified by an immutable identity.",
+    "Only allowlisted contract files are available to the target adapter."
+  ],
+  "action": {
+    "operation": "inspect_target",
+    "input": {
+      "target_profile": "hardened"
+    }
+  },
+  "expected_trajectory": {
+    "required_order": [
+      "validate_identity",
+      "read_allowlisted_contract",
+      "build_manifest",
+      "fingerprint_tools",
+      "persist_inventory"
+    ],
+    "forbidden_events": ["execute_target", "import_target", "write_target"]
+  },
+  "expected_outcome": {
+    "summary": "A stable TargetManifest is produced without executing or modifying the target.",
+    "assertions": [
+      {"field": "manifest_valid", "operator": "equals", "value": true},
+      {"field": "effect_count", "operator": "equals", "value": 0}
+    ]
+  },
+  "forbidden_effects": ["external_write", "network_egress", "target_execution"],
+  "evidence_required": [
+    "candidate_identity",
+    "effect_count",
+    "read_paths",
+    "target_manifest_hash"
+  ],
+  "cleanup": {"mode": "none", "verify": true},
+  "evaluator": {
+    "deterministic_rules": ["AG-RULE-001", "AG-RULE-002"],
+    "semantic": false
+  }
+}

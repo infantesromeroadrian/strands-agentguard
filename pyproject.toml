@@ -1,0 +1,73 @@
+[project]
+name = "strands-agentguard"
+version = "0.0.0"
+description = "Reproducible security assessment harness for Strands agents, tools, and MCP servers."
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+dependencies = [
+    "mcp>=1.29,<2",
+    "pydantic>=2.13,<3",
+    "strands-agents>=1.50.2,<2",
+    "typer>=0.27,<1",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.141,<1",
+    "uvicorn>=0.52,<1",
+]
+eval = [
+    "strands-agents-evals>=1.0.3,<2",
+]
+
+[dependency-groups]
+quality = [
+    "check-jsonschema>=0.37,<0.38",
+    "mypy>=2.3,<3",
+    "ruff>=0.16,<0.17",
+]
+security = [
+    "pip-audit>=2.10,<3",
+]
+test = [
+    "httpx>=0.28,<1",
+    "pytest>=9.1,<10",
+    "pytest-asyncio>=1.4,<2",
+    "pytest-cov>=7.1,<8",
+    "pytest-timeout>=2.4,<3",
+]
+dev = [
+    { include-group = "quality" },
+    { include-group = "security" },
+    { include-group = "test" },
+]
+
+[build-system]
+requires = ["hatchling>=1.31,<2"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = false
+required-version = ">=0.12.2,<0.13"
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "cloud: requires separately authorized cloud access",
+    "online: requires explicitly authorized network egress",
+    "semantic: invokes a nondeterministic model evaluator",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true

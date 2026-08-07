@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "corpus_id": "AG-THREAT-CORPUS",
+  "version": "0.1.0",
+  "frozen": true,
+  "frozen_at": "2026-08-07T07:43:50Z",
+  "provenance": "authored_for_strands_agentguard",
+  "confidence": "designed_not_executed",
+  "synthetic": true,
+  "real_data": false,
+  "scenario_schema": "schemas/scenario.schema.json",
+  "scenario_count": 10,
+  "scenarios": [
+    {
+      "scenario_id": "AG-SCN-001",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-001.json",
+      "sha256": "7e13285ed06235bc209b43c8c68835f61826af5a25d214b8e1bf90ee7132c68b"
+    },
+    {
+      "scenario_id": "AG-SCN-002",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-002.json",
+      "sha256": "da068271459bb68dd8f449e96b6be440f5c4a366c1295a1fad9b1edeb5b8f2ee"
+    },
+    {
+      "scenario_id": "AG-SCN-003",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-003.json",
+      "sha256": "796fe763411ebc524190fa3534bde4bb4f6e4c04f934aab46dd92cd6d4b385c2"
+    },
+    {
+      "scenario_id": "AG-SCN-004",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-004.json",
+      "sha256": "84802607eab863f5437c5384637b43c6e58ae8b9e4087de200595ca97c7a3198"
+    },
+    {
+      "scenario_id": "AG-SCN-005",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-005.json",
+      "sha256": "4e76e6d5f8beec7e2e6d2accf39102ccf0fc7727b19628230cabc3b96a3a8f9b"
+    },
+    {
+      "scenario_id": "AG-SCN-006",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-006.json",
+      "sha256": "4892c5b1111ec24d14aea221b8d12b6f8b246c1d525b1bc353d16e290b72e37b"
+    },
+    {
+      "scenario_id": "AG-SCN-007",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-007.json",
+      "sha256": "af50dca3e53445ca5f494169f26a7ac45abd12878fe38380bbc55a7029480002"
+    },
+    {
+      "scenario_id": "AG-SCN-008",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-008.json",
+      "sha256": "22a31cc68094f9f2ff89bd922ff80de7568f280f94dbbcce1d2bdb7b73be8a88"
+    },
+    {
+      "scenario_id": "AG-SCN-009",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-009.json",
+      "sha256": "79072b799cf530bb51c1915b0729c3d8e605854d82f43f97136250cf92fce996"
+    },
+    {
+      "scenario_id": "AG-SCN-010",
+      "path": "fixtures/scenarios/v0.1.0/ag-scn-010.json",
+      "sha256": "84815f04567dc7e6c36b12655cb2b41cab90efb82baafea1c75e6fb2af4e0c88"
+    }
+  ]
+}

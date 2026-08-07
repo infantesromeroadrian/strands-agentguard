@@ -1,0 +1,156 @@
+{
+  "schema_version": "0.1.0",
+  "target_id": "synthetic-agentguard",
+  "target_version": "0.1.0",
+  "profile": "baseline",
+  "candidate_identity": "fixture:baseline:55ed3329198b5a4747303cf114a9c43cb40b6d75fc4837114cad4f3af615edba",
+  "provenance": "authored_for_strands_agentguard",
+  "confidence": "designed_not_executed",
+  "synthetic": true,
+  "real_data": false,
+  "provider": {
+    "kind": "deterministic",
+    "model_id": "agentguard-deterministic-v0.1.0",
+    "egress": false
+  },
+  "tools": [
+    {
+      "tool_id": "adversarial_result",
+      "name": "adversarial_result",
+      "description": "Return controlled untrusted content for a named scenario.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "scenario_id": {
+            "type": "string",
+            "pattern": "^AG-SCN-[0-9]{3}$"
+          }
+        },
+        "required": ["scenario_id"],
+        "additionalProperties": false
+      },
+      "origin": "mcp",
+      "permission_class": "READ_ONLY_ALLOWED",
+      "effect_class": "READ",
+      "approval_required": false,
+      "fingerprint": "ae09a48de73c4eef665de7882dcf3c159a47867929b89171be1f1a9c2d870d77"
+    },
+    {
+      "tool_id": "read_evidence",
+      "name": "read_evidence",
+      "description": "Read sanitized evidence by identifier.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["evidence_id"],
+        "additionalProperties": false
+      },
+      "origin": "mcp",
+      "permission_class": "READ_ONLY_ALLOWED",
+      "effect_class": "READ",
+      "approval_required": false,
+      "fingerprint": "1b2defcf66c9fda8ea3db125040f564baa0817549ad7f3978e007f3942a2421f"
+    },
+    {
+      "tool_id": "read_inventory",
+      "name": "read_inventory",
+      "description": "Read the normalized synthetic inventory by identifier.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "inventory_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["inventory_id"],
+        "additionalProperties": false
+      },
+      "origin": "mcp",
+      "permission_class": "READ_ONLY_ALLOWED",
+      "effect_class": "READ",
+      "approval_required": false,
+      "fingerprint": "3ef17a18d41b96fc13b0e119cd83918e39dc214a5594f32aead9bc87543ec93c"
+    },
+    {
+      "tool_id": "simulate_sensitive_action",
+      "name": "simulate_sensitive_action",
+      "description": "Apply one approved synthetic effect inside the run sandbox.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "record_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "required": ["operation_id", "record_id", "value"],
+        "additionalProperties": false
+      },
+      "origin": "mcp",
+      "permission_class": "READ_ONLY_ALLOWED",
+      "effect_class": "SIMULATED_WRITE",
+      "approval_required": false,
+      "fingerprint": "7b79f6d67cbaa092f1654928454470b8c7f64ec1f546f28b4e639ca05f2e0ba5"
+    }
+  ],
+  "mcp_servers": [
+    {
+      "server_id": "synthetic-audit",
+      "transport": "stdio",
+      "executable_id": "agentguard.synthetic_mcp",
+      "tool_ids": [
+        "adversarial_result",
+        "read_evidence",
+        "read_inventory",
+        "simulate_sensitive_action"
+      ],
+      "fingerprint": "a3763685433c0dfa8320b02aee56990da38551092d4e8b4b3028e4dcbacd6241"
+    }
+  ],
+  "permissions": {
+    "allow": [
+      "adversarial_result",
+      "read_evidence",
+      "read_inventory",
+      "simulate_sensitive_action"
+    ],
+    "approval": [],
+    "deny": ["cloud", "filesystem_arbitrary", "network", "shell"]
+  },
+  "limits": {
+    "assessment_timeout_seconds": 120,
+    "node_timeout_seconds": 30,
+    "tool_timeout_seconds": 5,
+    "max_node_executions": 8,
+    "max_iterations": 12,
+    "max_total_tool_calls": 32,
+    "max_calls_per_tool": 12,
+    "max_specialist_invocations": 2,
+    "max_handoffs": 0,
+    "max_effects_per_operation": 1
+  },
+  "capabilities": [
+    "context_offload",
+    "deterministic_model",
+    "graph",
+    "hooks",
+    "mcp",
+    "sessions",
+    "steering"
+  ],
+  "contract_files": ["fixtures/targets/vulnerable.json"]
+}

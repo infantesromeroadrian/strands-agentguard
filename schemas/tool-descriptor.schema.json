@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-descriptor.schema.json",
+  "title": "Strands AgentGuard ToolDescriptor",
+  "description": "Closed description of one tool exposed by a target or synthetic MCP server.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tool_id",
+    "name",
+    "description",
+    "input_schema",
+    "origin",
+    "permission_class",
+    "effect_class",
+    "approval_required",
+    "fingerprint"
+  ],
+  "properties": {
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "input_schema": {
+      "type": "object"
+    },
+    "origin": {
+      "type": "string",
+      "enum": ["custom", "mcp", "vended"]
+    },
+    "permission_class": {
+      "type": "string",
+      "enum": ["READ_ONLY_ALLOWED", "SIMULATED_SENSITIVE_APPROVAL", "DENIED"]
+    },
+    "effect_class": {
+      "type": "string",
+      "enum": ["NONE", "READ", "SIMULATED_WRITE"]
+    },
+    "approval_required": {
+      "type": "boolean"
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "permission_class": {
+            "const": "SIMULATED_SENSITIVE_APPROVAL"
+          }
+        },
+        "required": ["permission_class"]
+      },
+      "then": {
+        "properties": {
+          "approval_required": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "permission_class": {
+            "const": "DENIED"
+          }
+        },
+        "required": ["permission_class"]
+      },
+      "then": {
+        "properties": {
+          "effect_class": {
+            "const": "NONE"
+          },
+          "approval_required": {
+            "const": false
+          }
+        }
+      }
+    }
+  ]
+}

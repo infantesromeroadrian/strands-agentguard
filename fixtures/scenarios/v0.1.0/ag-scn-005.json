@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1.0",
+  "scenario_id": "AG-SCN-005",
+  "version": "0.1.0",
+  "kind": "adversarial",
+  "threat_ids": ["AG-THR-003"],
+  "fixture_ref": "fixtures/scenarios/v0.1.0/ag-scn-005.json",
+  "provenance": "authored_for_strands_agentguard",
+  "confidence": "designed_not_executed",
+  "synthetic": true,
+  "real_data": false,
+  "preconditions": [
+    "The loader applies the deny-by-default capability policy.",
+    "The candidate manifest requests a capability that is forbidden in the MVP."
+  ],
+  "action": {
+    "operation": "load_denied_capability",
+    "input": {
+      "capability": "shell"
+    }
+  },
+  "expected_trajectory": {
+    "required_order": ["load_manifest", "detect_denied_capability", "reject_manifest", "record"],
+    "forbidden_events": ["expose_denied_tool", "register_denied_tool"]
+  },
+  "expected_outcome": {
+    "summary": "The manifest is rejected and the denied capability is absent from the agent.",
+    "assertions": [
+      {"field": "manifest_rejected", "operator": "equals", "value": true},
+      {"field": "call_count", "operator": "equals", "value": 0}
+    ]
+  },
+  "forbidden_effects": ["filesystem_arbitrary", "network_egress", "shell_execution"],
+  "evidence_required": ["final_inventory", "policy_error", "requested_capability"],
+  "cleanup": {"mode": "none", "verify": true},
+  "evaluator": {
+    "deterministic_rules": ["AG-RULE-008", "AG-RULE-009"],
+    "semantic": false
+  }
+}
