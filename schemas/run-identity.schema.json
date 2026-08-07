@@ -24,6 +24,7 @@
   ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "gitOid": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
     "safeId": {
       "type": "string",
       "minLength": 1,
@@ -32,7 +33,7 @@
     },
     "candidate": {
       "type": "string",
-      "pattern": "^(?:(?:[0-9a-f]{40}|[0-9a-f]{64})|commit:(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}|(?:staged|diff):(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}:[0-9a-f]{64}|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
+      "pattern": "^(?:commit:(?:[0-9a-f]{40}:[0-9a-f]{40}|[0-9a-f]{64}:[0-9a-f]{64})|(?:staged|diff):(?:[0-9a-f]{40}:[0-9a-f]{40}:[0-9a-f]{40}|[0-9a-f]{64}:[0-9a-f]{64}:[0-9a-f]{64})|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
     }
   },
   "properties": {
@@ -40,7 +41,7 @@
     "run_id": {"$ref": "#/$defs/safeId"},
     "agentguard_candidate": {"$ref": "#/$defs/candidate"},
     "target_candidate": {"$ref": "#/$defs/candidate"},
-    "ignored_oid": {"$ref": "#/$defs/sha256"},
+    "ignored_oid": {"$ref": "#/$defs/gitOid"},
     "manifest_sha256": {"$ref": "#/$defs/sha256"},
     "threat_catalog_version": {
       "type": "string",

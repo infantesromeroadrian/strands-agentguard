@@ -3,7 +3,7 @@
   "$id": "target-manifest.schema.json",
   "title": "Strands AgentGuard TargetManifest",
   "description": "Versioned, closed manifest for one synthetic or read-only assessment target.",
-  "$comment": "Pydantic additionally enforces sorted unique IDs, disjoint permissions, tool-to-MCP membership, and permission classification.",
+  "$comment": "Pydantic additionally enforces sorted unique IDs, disjoint permissions, allow/approval references to declared tools, tool-to-MCP membership, and permission classification. deny may include ambient capabilities.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -54,7 +54,7 @@
     },
     "candidate_identity": {
       "type": "string",
-      "pattern": "^(?:(?:[0-9a-f]{40}|[0-9a-f]{64})|commit:(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}|(?:staged|diff):(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}:[0-9a-f]{64}|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
+      "pattern": "^(?:commit:(?:[0-9a-f]{40}:[0-9a-f]{40}|[0-9a-f]{64}:[0-9a-f]{64})|(?:staged|diff):(?:[0-9a-f]{40}:[0-9a-f]{40}:[0-9a-f]{40}|[0-9a-f]{64}:[0-9a-f]{64}:[0-9a-f]{64})|fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64})$"
     },
     "provenance": {"const": "authored_for_strands_agentguard"},
     "confidence": {"const": "designed_not_executed"},
@@ -74,7 +74,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"$ref": "schemas/tool-descriptor.schema.json"}
+      "items": {"$ref": "tool-descriptor.schema.json"}
     },
     "mcp_servers": {
       "type": "array",

@@ -11,6 +11,9 @@ import pytest
 
 # jsonschema in the locked environment does not publish a typing marker or stubs.
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped, unused-ignore]
+from jsonschema.exceptions import (  # type: ignore[import-untyped, unused-ignore]
+    ValidationError as JsonSchemaValidationError,
+)
 from pydantic import BaseModel, ValidationError
 from referencing import Registry, Resource
 
@@ -55,12 +58,12 @@ def valid_finding_payload() -> dict[str, Any]:
     }
 
 
-def valid_run_identity_payload() -> dict[str, Any]:
-    ignored_oid = "b" * 64
+def valid_run_identity_payload(oid_length: int = 40) -> dict[str, Any]:
+    ignored_oid = "b" * oid_length
     payload: dict[str, Any] = {
         "schema_version": "0.1.0",
         "run_id": "run-001",
-        "agentguard_candidate": f"commit:{'a' * 40}:{ignored_oid}",
+        "agentguard_candidate": f"commit:{'a' * oid_length}:{ignored_oid}",
         "target_candidate": f"fixture:hardened:{'c' * 64}",
         "ignored_oid": ignored_oid,
         "manifest_sha256": "d" * 64,
@@ -84,8 +87,8 @@ def valid_assessment() -> AssessmentResult:
         completed=True,
         passed=False,
         incomplete_reason=None,
-        evidence_refs=["artifacts/evidence.json#/events/0"],
-        finding_ids=["finding-001"],
+        evidence_refs=("artifacts/evidence.json#/events/0",),
+        finding_ids=("finding-001",),
     )
     started_at = datetime(2026, 8, 7, 8, 0, tzinfo=UTC)
     return AssessmentResult(
@@ -97,8 +100,8 @@ def valid_assessment() -> AssessmentResult:
             completed_at=started_at + timedelta(seconds=2),
         ),
         stop_reason="assessment completed",
-        scenario_results=[scenario_result],
-        findings=[finding],
+        scenario_results=(scenario_result,),
+        findings=(finding,),
         metrics={"duration_seconds": 2.0, "scenario_count": 1},
         artifact_hashes={"artifacts/evidence.json": "2" * 64},
         summary=AssessmentSummary(completed=True, incomplete_reason=None),
@@ -309,17 +312,17 @@ def test_assessment_result_represents_incomplete_scenario_explicitly() -> None:
             completed_at=started_at + timedelta(seconds=1),
         ),
         stop_reason="configured limit reached",
-        scenario_results=[
+        scenario_results=(
             ScenarioResult(
                 scenario_id="AG-SCN-004",
                 completed=False,
                 passed=None,
                 incomplete_reason="Tool timeout reached",
-                evidence_refs=[],
-                finding_ids=[],
-            )
-        ],
-        findings=[],
+                evidence_refs=(),
+                finding_ids=(),
+            ),
+        ),
+        findings=(),
         metrics={"duration_seconds": 1},
         artifact_hashes={},
         summary=AssessmentSummary(
@@ -362,9 +365,7 @@ def schema_registry() -> tuple[dict[str, dict[str, Any]], Registry[Any]]:
         path.name: load_json(path) for path in sorted((ROOT / "schemas").glob("*.schema.json"))
     }
     registry = Registry().with_resources(
-        (uri, Resource.from_contents(schema))
-        for name, schema in schemas.items()
-        for uri in (schema["$id"], f"schemas/{name}")
+        (schema["$id"], Resource.from_contents(schema)) for schema in schemas.values()
     )
     return schemas, registry
 
@@ -429,3 +430,278 @@ def test_every_schema_is_valid_draft_2020_12() -> None:
 
     for schema in schemas.values():
         Draft202012Validator.check_schema(schema)
+
+
+def validate_schema(schema_name: str, instance: Any) -> None:
+    schemas, registry = schema_registry()
+    Draft202012Validator(schemas[schema_name], registry=registry).validate(instance)
+
+
+@pytest.mark.parametrize("oid_length", [40, 64])
+def test_run_identity_supports_sha1_and_sha256_git_oids(oid_length: int) -> None:
+    payload = valid_run_identity_payload(oid_length)
+
+    identity = RunIdentity.model_validate(payload)
+    validate_schema("run-identity.schema.json", payload)
+
+    assert len(identity.ignored_oid) == oid_length
+
+
+@pytest.mark.parametrize("candidate", ["a" * 40, "a" * 64])
+def test_candidate_identities_must_be_tagged(candidate: str) -> None:
+    run_payload = valid_run_identity_payload()
+    run_payload["agentguard_candidate"] = candidate
+    run_payload["identity_digest"] = RunIdentity.digest_for(run_payload)
+    with pytest.raises(ValidationError, match="agentguard_candidate"):
+        RunIdentity.model_validate(run_payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("run-identity.schema.json", run_payload)
+
+    target_payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    target_payload["candidate_identity"] = candidate
+    with pytest.raises(ValidationError, match="candidate_identity"):
+        TargetManifest.model_validate(target_payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("target-manifest.schema.json", target_payload)
+
+
+def test_candidate_git_oid_widths_must_match() -> None:
+    payload = valid_run_identity_payload()
+    payload["agentguard_candidate"] = f"commit:{'a' * 40}:{'b' * 64}"
+    payload["ignored_oid"] = "b" * 64
+    payload["identity_digest"] = RunIdentity.digest_for(payload)
+
+    with pytest.raises(ValidationError, match="agentguard_candidate"):
+        RunIdentity.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("run-identity.schema.json", payload)
+
+
+@pytest.mark.parametrize("permission_list", ["allow", "approval"])
+def test_permissive_lists_reject_undeclared_tool_ids(permission_list: str) -> None:
+    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    payload["permissions"][permission_list].append("undeclared_tool")
+    payload["permissions"][permission_list].sort()
+
+    with pytest.raises(ValidationError, match="undeclared tools"):
+        TargetManifest.model_validate(payload)
+
+
+def test_deny_may_retain_disjoint_ambient_capabilities() -> None:
+    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+
+    manifest = TargetManifest.model_validate(payload)
+
+    assert "network" in manifest.permissions.deny
+    assert "network" not in {tool.tool_id for tool in manifest.tools}
+
+
+@pytest.mark.parametrize(
+    ("permission_class", "effect_class", "approval_required"),
+    [
+        ("READ_ONLY_ALLOWED", "READ", False),
+        ("READ_ONLY_ALLOWED", "SIMULATED_WRITE", False),
+        ("SIMULATED_SENSITIVE_APPROVAL", "SIMULATED_WRITE", True),
+        ("DENIED", "NONE", False),
+    ],
+)
+def test_tool_policy_matrix_accepts_only_declared_states(
+    permission_class: str,
+    effect_class: str,
+    approval_required: bool,
+) -> None:
+    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload.update(
+        permission_class=permission_class,
+        effect_class=effect_class,
+        approval_required=approval_required,
+    )
+
+    ToolDescriptor.model_validate(payload)
+    validate_schema("tool-descriptor.schema.json", payload)
+
+
+@pytest.mark.parametrize(
+    ("permission_class", "effect_class", "approval_required"),
+    [
+        ("READ_ONLY_ALLOWED", "NONE", False),
+        ("READ_ONLY_ALLOWED", "READ", True),
+        ("SIMULATED_SENSITIVE_APPROVAL", "READ", True),
+        ("SIMULATED_SENSITIVE_APPROVAL", "SIMULATED_WRITE", False),
+        ("DENIED", "READ", False),
+        ("DENIED", "NONE", True),
+    ],
+)
+def test_tool_policy_matrix_rejects_all_other_states(
+    permission_class: str,
+    effect_class: str,
+    approval_required: bool,
+) -> None:
+    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload.update(
+        permission_class=permission_class,
+        effect_class=effect_class,
+        approval_required=approval_required,
+    )
+
+    with pytest.raises(ValidationError, match="incoherent"):
+        ToolDescriptor.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("tool-descriptor.schema.json", payload)
+
+
+def test_model_validate_json_rejects_duplicate_keys_at_nested_depth() -> None:
+    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    raw = json.dumps(payload).replace(
+        '"type": "object"',
+        '"type": "object", "type": "array"',
+        1,
+    )
+
+    with pytest.raises(ValueError, match="duplicate JSON key: 'type'"):
+        ToolDescriptor.model_validate_json(raw)
+
+
+def test_models_deep_freeze_nested_contract_data() -> None:
+    target_payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    manifest = TargetManifest.model_validate(target_payload)
+    descriptor = manifest.tools[0]
+    assessment = valid_assessment()
+    scenario_payload = load_json(SCENARIO_FIXTURES[0])
+    scenario_payload["expected_outcome"]["assertions"][0]["value"] = {"nested": ["immutable"]}
+    scenario = Scenario.model_validate(scenario_payload)
+
+    with pytest.raises(TypeError):
+        cast(dict[str, Any], descriptor.input_schema)["properties"] = {}
+    properties = cast(dict[str, Any], descriptor.input_schema["properties"])
+    with pytest.raises(TypeError):
+        properties["new"] = {"type": "string"}
+    with pytest.raises(AttributeError):
+        cast(list[str], manifest.permissions.allow).append("new_tool")
+    with pytest.raises(TypeError):
+        cast(dict[str, Any], assessment.metrics)["new_metric"] = 1
+    assertion_value = cast(dict[str, Any], scenario.expected_outcome.assertions[0].value)
+    with pytest.raises(TypeError):
+        assertion_value["nested"] = []
+    with pytest.raises(AttributeError):
+        cast(list[str], assertion_value["nested"]).append("changed")
+
+
+def test_input_schema_must_be_valid_draft_2020_12() -> None:
+    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload["input_schema"]["required"] = "scenario_id"
+    payload["fingerprint"] = ToolDescriptor.fingerprint_for(
+        name=payload["name"],
+        description=payload["description"],
+        input_schema=payload["input_schema"],
+    )
+
+    with pytest.raises(ValidationError, match="valid Draft 2020-12"):
+        ToolDescriptor.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("tool-descriptor.schema.json", payload)
+
+
+def test_local_evidence_requires_matching_artifact_hash() -> None:
+    payload = json.loads(valid_assessment().model_dump_json())
+    payload["artifact_hashes"] = {}
+
+    with pytest.raises(ValidationError, match="lack artifact hashes"):
+        AssessmentResult.model_validate_json(json.dumps(payload))
+
+
+def test_external_evidence_does_not_require_local_artifact_hash() -> None:
+    payload = json.loads(valid_assessment().model_dump_json())
+    external_ref = "https://evidence.invalid/runs/run-001/events/0"
+    payload["scenario_results"][0]["evidence_refs"] = [external_ref]
+    payload["findings"][0]["evidence_refs"] = [external_ref]
+    payload["artifact_hashes"] = {}
+
+    result = AssessmentResult.model_validate_json(json.dumps(payload))
+    validate_schema("assessment-result.schema.json", payload)
+
+    assert result.artifact_hashes == {}
+
+
+@pytest.mark.parametrize("reference", ["file:///etc/passwd", "FILE:///etc/passwd", "FiLe:x"])
+def test_file_uri_is_rejected_case_insensitively(reference: str) -> None:
+    payload = valid_finding_payload()
+    payload["evidence_refs"] = [reference]
+
+    with pytest.raises(ValidationError, match="non-file reference"):
+        Finding.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("finding.schema.json", payload)
+
+
+def test_huge_integer_metric_is_a_stable_validation_error() -> None:
+    payload = json.loads(valid_assessment().model_dump_json())
+    payload["metrics"]["huge"] = 10**1000
+
+    with pytest.raises(ValidationError, match="less than or equal"):
+        AssessmentResult.model_validate_json(json.dumps(payload))
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("assessment-result.schema.json", payload)
+
+
+def test_scenario_set_like_collections_are_unique_and_canonicalized() -> None:
+    payload = load_json(SCENARIO_FIXTURES[0])
+    payload["threat_ids"] = ["AG-THR-999", payload["threat_ids"][0]]
+    payload["forbidden_effects"] = ["z_event", "a_event"]
+    payload["evidence_required"] = ["z_evidence", "a_evidence"]
+
+    scenario = Scenario.model_validate(payload)
+    validate_schema("scenario.schema.json", payload)
+
+    assert scenario.threat_ids == tuple(sorted(payload["threat_ids"]))
+    assert scenario.forbidden_effects == ("a_event", "z_event")
+    assert scenario.evidence_required == ("a_evidence", "z_evidence")
+
+    payload["evidence_required"] = ["duplicate", "duplicate"]
+    with pytest.raises(ValidationError, match="duplicates"):
+        Scenario.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("scenario.schema.json", payload)
+
+
+def incomplete_assessment_payload() -> dict[str, Any]:
+    payload = cast(dict[str, Any], json.loads(valid_assessment().model_dump_json()))
+    payload["scenario_results"][0].update(
+        completed=False,
+        passed=None,
+        incomplete_reason="Tool timeout reached",
+    )
+    payload["summary"] = {
+        "completed": False,
+        "incomplete_reason": "At least one scenario did not complete",
+    }
+    payload["stop_reason"] = "configured limit reached"
+    return payload
+
+
+def test_assessment_global_completion_state_is_coherent() -> None:
+    incomplete = incomplete_assessment_payload()
+    AssessmentResult.model_validate_json(json.dumps(incomplete))
+    validate_schema("assessment-result.schema.json", incomplete)
+
+    completed_scenarios_with_incomplete_summary = json.loads(valid_assessment().model_dump_json())
+    completed_scenarios_with_incomplete_summary["summary"] = {
+        "completed": False,
+        "incomplete_reason": "Unexpected stop",
+    }
+    completed_scenarios_with_incomplete_summary["stop_reason"] = "configured limit reached"
+    with pytest.raises(ValidationError, match=r"summary\.completed"):
+        AssessmentResult.model_validate_json(
+            json.dumps(completed_scenarios_with_incomplete_summary)
+        )
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema(
+            "assessment-result.schema.json",
+            completed_scenarios_with_incomplete_summary,
+        )
+
+    incomplete["stop_reason"] = "assessment completed"
+    with pytest.raises(ValidationError, match="completed stop_reason"):
+        AssessmentResult.model_validate_json(json.dumps(incomplete))
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("assessment-result.schema.json", incomplete)

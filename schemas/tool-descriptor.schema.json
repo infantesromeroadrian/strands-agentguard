@@ -3,7 +3,7 @@
   "$id": "tool-descriptor.schema.json",
   "title": "Strands AgentGuard ToolDescriptor",
   "description": "Closed v0.1.0 description of one tool. fingerprint is SHA-256 of compact, key-sorted UTF-8 JSON for {name, description, input_schema}, including one terminal LF.",
-  "$comment": "Pydantic additionally verifies the fingerprint value against the canonical material.",
+  "$comment": "Pydantic additionally verifies the fingerprint value against the canonical material. READ_ONLY_ALLOWED plus SIMULATED_WRITE represents the deliberate vulnerable baseline.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -32,12 +32,17 @@
       "maxLength": 512
     },
     "input_schema": {
-      "type": "object",
-      "required": ["type", "additionalProperties"],
-      "properties": {
-        "type": {"const": "object"},
-        "additionalProperties": {"const": false}
-      }
+      "allOf": [
+        {"$ref": "https://json-schema.org/draft/2020-12/schema"},
+        {
+          "type": "object",
+          "required": ["type", "additionalProperties"],
+          "properties": {
+            "type": {"const": "object"},
+            "additionalProperties": {"const": false}
+          }
+        }
+      ]
     },
     "origin": {
       "type": "string",
@@ -57,29 +62,33 @@
       "pattern": "^[0-9a-f]{64}$"
     }
   },
-  "allOf": [
+  "oneOf": [
     {
-      "if": {
-        "properties": {"permission_class": {"const": "SIMULATED_SENSITIVE_APPROVAL"}},
-        "required": ["permission_class"]
-      },
-      "then": {
-        "properties": {
-          "approval_required": {"const": true},
-          "effect_class": {"const": "SIMULATED_WRITE"}
-        }
+      "properties": {
+        "permission_class": {"const": "READ_ONLY_ALLOWED"},
+        "effect_class": {"const": "READ"},
+        "approval_required": {"const": false}
       }
     },
     {
-      "if": {
-        "properties": {"permission_class": {"const": "DENIED"}},
-        "required": ["permission_class"]
-      },
-      "then": {
-        "properties": {
-          "approval_required": {"const": false},
-          "effect_class": {"const": "NONE"}
-        }
+      "properties": {
+        "permission_class": {"const": "READ_ONLY_ALLOWED"},
+        "effect_class": {"const": "SIMULATED_WRITE"},
+        "approval_required": {"const": false}
+      }
+    },
+    {
+      "properties": {
+        "permission_class": {"const": "SIMULATED_SENSITIVE_APPROVAL"},
+        "effect_class": {"const": "SIMULATED_WRITE"},
+        "approval_required": {"const": true}
+      }
+    },
+    {
+      "properties": {
+        "permission_class": {"const": "DENIED"},
+        "effect_class": {"const": "NONE"},
+        "approval_required": {"const": false}
       }
     }
   ]

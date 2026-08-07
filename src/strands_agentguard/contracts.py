@@ -13,26 +13,108 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from pathlib import PurePosixPath
-from typing import Annotated, Literal, Self
+from types import MappingProxyType
+from typing import Annotated, Any, Literal, Self, cast
+from urllib.parse import urlsplit
 
+# jsonschema is present in the locked quality environment.  Importing the
+# validator here keeps tool schemas on the same Draft 2020-12 boundary as the
+# persisted contract schemas.
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped, unused-ignore]
+from jsonschema.exceptions import SchemaError  # type: ignore[import-untyped, unused-ignore]
 from pydantic import (
     AfterValidator,
     AwareDatetime,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     JsonValue,
+    PlainSerializer,
     StringConstraints,
     field_validator,
     model_validator,
 )
+from pydantic.config import ExtraValues
 
 SCHEMA_VERSION = "0.1.0"
 
-type JsonObject = dict[str, JsonValue]
+
+def _to_tuple(value: object) -> object:
+    if isinstance(value, list):
+        return tuple(value)
+    return value
+
+
+type FrozenSequence[Item] = Annotated[
+    tuple[Item, ...],
+    BeforeValidator(_to_tuple),
+]
+
+
+def _freeze_mapping[Key, Value](value: Mapping[Key, Value]) -> Mapping[Key, Value]:
+    return MappingProxyType(dict(value))
+
+
+def _serialize_mapping[Key, Value](value: Mapping[Key, Value]) -> dict[Key, Value]:
+    return dict(value)
+
+
+type FrozenMapping[Key, Value] = Annotated[
+    Mapping[Key, Value],
+    AfterValidator(_freeze_mapping),
+    PlainSerializer(_serialize_mapping, return_type=dict[Key, Value]),
+]
+
+
+def _deep_freeze_json(value: JsonValue) -> object:
+    if isinstance(value, dict):
+        return MappingProxyType({key: _deep_freeze_json(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_deep_freeze_json(item) for item in value)
+    return value
+
+
+def _thaw_json(value: object) -> JsonValue:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Mapping):
+        if not all(isinstance(key, str) for key in value):
+            raise TypeError("JSON object keys must be strings")
+        return {str(key): _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_thaw_json(item) for item in value]
+    raise TypeError(f"unsupported JSON value: {type(value).__name__}")
+
+
+def _freeze_json_object(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    return cast(Mapping[str, JsonValue], _deep_freeze_json(dict(value)))
+
+
+def _serialize_json_object(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    thawed = _thaw_json(value)
+    if not isinstance(thawed, dict):
+        raise TypeError("expected a JSON object")
+    return thawed
+
+
+type JsonObject = Annotated[
+    Mapping[str, JsonValue],
+    AfterValidator(_freeze_json_object),
+    PlainSerializer(_serialize_json_object, return_type=dict[str, JsonValue]),
+]
+type ImmutableJsonValue = Annotated[
+    JsonValue,
+    AfterValidator(_deep_freeze_json),
+    PlainSerializer(_thaw_json, return_type=JsonValue),
+]
 type Sha256Hex = Annotated[
     str,
     StringConstraints(pattern=r"^[0-9a-f]{64}$", strict=True),
+]
+type GitOid = Annotated[
+    str,
+    StringConstraints(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$", strict=True),
 ]
 type SemanticVersion = Annotated[
     str,
@@ -95,9 +177,10 @@ type EventId = Annotated[
 _SAFE_PATH_PATTERN = r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
 _CANDIDATE_PATTERN = (
     r"^(?:"
-    r"(?:[0-9a-f]{40}|[0-9a-f]{64})|"
-    r"commit:(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}|"
-    r"(?:staged|diff):(?:[0-9a-f]{40}|[0-9a-f]{64}):[0-9a-f]{64}:[0-9a-f]{64}|"
+    r"commit:(?:[0-9a-f]{40}:[0-9a-f]{40}|[0-9a-f]{64}:[0-9a-f]{64})|"
+    r"(?:staged|diff):(?:"
+    r"[0-9a-f]{40}:[0-9a-f]{40}:[0-9a-f]{40}|"
+    r"[0-9a-f]{64}:[0-9a-f]{64}:[0-9a-f]{64})|"
     r"fixture:[a-z0-9][a-z0-9._-]{0,63}:[0-9a-f]{64}"
     r")$"
 )
@@ -128,13 +211,24 @@ type SafeRelativePath = Annotated[
 
 def _validate_evidence_reference(value: str) -> str:
     normalized = value.replace("#", "/")
+    parsed = urlsplit(value)
     if (
-        value.startswith(("/", "\\", "file:"))
+        value.startswith(("/", "\\"))
+        or parsed.scheme.lower() == "file"
         or "\\" in value
         or any(part == ".." for part in normalized.split("/"))
     ):
         raise ValueError("must be an addressable non-file reference without traversal")
+    if not parsed.scheme:
+        local_path = value.partition("#")[0]
+        _validate_safe_relative_path(local_path)
     return value
+
+
+def _local_evidence_path(value: str) -> str | None:
+    if urlsplit(value).scheme:
+        return None
+    return value.partition("#")[0]
 
 
 type EvidenceReference = Annotated[
@@ -149,7 +243,7 @@ type EvidenceReference = Annotated[
 ]
 
 
-def canonical_json_bytes(value: JsonValue) -> bytes:
+def canonical_json_bytes(value: object) -> bytes:
     """Serialize a JSON value deterministically for hashing.
 
     Version 0.1.0 uses sorted object keys, compact separators, UTF-8, and no
@@ -158,7 +252,7 @@ def canonical_json_bytes(value: JsonValue) -> bytes:
 
     try:
         serialized = json.dumps(
-            value,
+            _thaw_json(value),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -169,7 +263,7 @@ def canonical_json_bytes(value: JsonValue) -> bytes:
     return serialized.encode("utf-8")
 
 
-def canonical_sha256(value: JsonValue) -> str:
+def canonical_sha256(value: object) -> str:
     """Return the lowercase SHA-256 digest of canonical JSON bytes."""
 
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
@@ -190,6 +284,37 @@ class ContractModel(BaseModel):
     """Shared fail-closed Pydantic configuration."""
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    @classmethod
+    def model_validate_json(
+        cls,
+        json_data: str | bytes | bytearray,
+        *,
+        strict: bool | None = None,
+        extra: ExtraValues | None = None,
+        context: Any | None = None,
+        by_alias: bool | None = None,
+        by_name: bool | None = None,
+    ) -> Self:
+        """Parse JSON while rejecting duplicate keys at every object depth."""
+
+        def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+            result: dict[str, Any] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"duplicate JSON key: {key!r}")
+                result[key] = value
+            return result
+
+        json.loads(json_data, object_pairs_hook=reject_duplicates)
+        return super().model_validate_json(
+            json_data,
+            strict=strict,
+            extra=extra,
+            context=context,
+            by_alias=by_alias,
+            by_name=by_name,
+        )
 
 
 class ToolDescriptor(ContractModel):
@@ -217,11 +342,11 @@ class ToolDescriptor(ContractModel):
         *,
         name: str,
         description: str,
-        input_schema: JsonObject,
+        input_schema: Mapping[str, JsonValue],
     ) -> str:
         """Fingerprint the v0.1.0 registration surface of a tool."""
 
-        material: JsonValue = {
+        material: dict[str, object] = {
             "name": name,
             "description": description,
             "input_schema": input_schema,
@@ -247,18 +372,25 @@ class ToolDescriptor(ContractModel):
             raise ValueError("input_schema.type must be 'object'")
         if value.get("additionalProperties") is not False:
             raise ValueError("input_schema must explicitly deny additional properties")
+        try:
+            Draft202012Validator.check_schema(_serialize_json_object(value))
+        except SchemaError as exc:
+            raise ValueError("input_schema must be a valid Draft 2020-12 JSON Schema") from exc
         return value
 
     @model_validator(mode="after")
     def validate_coherence(self) -> Self:
-        if self.permission_class == "SIMULATED_SENSITIVE_APPROVAL" and (
-            not self.approval_required or self.effect_class != "SIMULATED_WRITE"
-        ):
-            raise ValueError("SIMULATED_SENSITIVE_APPROVAL requires approval and SIMULATED_WRITE")
-        if self.permission_class == "DENIED" and (
-            self.approval_required or self.effect_class != "NONE"
-        ):
-            raise ValueError("DENIED tools must require no approval and have no effect")
+        # READ_ONLY_ALLOWED + SIMULATED_WRITE intentionally represents the
+        # vulnerable baseline; every other accepted state is enumerated.
+        allowed_policy_states = {
+            ("READ_ONLY_ALLOWED", "READ", False),
+            ("READ_ONLY_ALLOWED", "SIMULATED_WRITE", False),
+            ("SIMULATED_SENSITIVE_APPROVAL", "SIMULATED_WRITE", True),
+            ("DENIED", "NONE", False),
+        }
+        policy_state = (self.permission_class, self.effect_class, self.approval_required)
+        if policy_state not in allowed_policy_states:
+            raise ValueError("permission_class, effect_class, and approval_required are incoherent")
         if not hmac.compare_digest(self.fingerprint, self.expected_fingerprint()):
             raise ValueError("fingerprint does not match canonical tool registration material")
         return self
@@ -277,24 +409,24 @@ class McpServerDescriptor(ContractModel):
         str,
         StringConstraints(pattern=r"^[a-z][a-z0-9._-]{0,127}$", strict=True),
     ]
-    tool_ids: Annotated[list[LowerIdentifier], Field(min_length=1)]
+    tool_ids: Annotated[FrozenSequence[LowerIdentifier], Field(min_length=1)]
     fingerprint: Sha256Hex
 
     @field_validator("tool_ids")
     @classmethod
-    def validate_tool_ids(cls, value: list[str]) -> list[str]:
+    def validate_tool_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_sorted_unique(value, "tool_ids")
         return value
 
 
 class PermissionSet(ContractModel):
-    allow: list[LowerIdentifier]
-    approval: list[LowerIdentifier]
-    deny: list[LowerIdentifier]
+    allow: FrozenSequence[LowerIdentifier]
+    approval: FrozenSequence[LowerIdentifier]
+    deny: FrozenSequence[LowerIdentifier]
 
     @field_validator("allow", "approval", "deny")
     @classmethod
-    def validate_lists(cls, value: list[str]) -> list[str]:
+    def validate_lists(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_sorted_unique(value, "permission list")
         return value
 
@@ -347,29 +479,31 @@ class TargetManifest(ContractModel):
     synthetic: Literal[True]
     real_data: Literal[False]
     provider: DeterministicProvider
-    tools: Annotated[list[ToolDescriptor], Field(min_length=1)]
-    mcp_servers: list[McpServerDescriptor]
+    tools: Annotated[FrozenSequence[ToolDescriptor], Field(min_length=1)]
+    mcp_servers: FrozenSequence[McpServerDescriptor]
     permissions: PermissionSet
     limits: ExecutionLimits
-    capabilities: Annotated[list[LowerIdentifier], Field(min_length=1)]
-    contract_files: Annotated[list[SafeRelativePath], Field(min_length=1, max_length=16)]
+    capabilities: Annotated[FrozenSequence[LowerIdentifier], Field(min_length=1)]
+    contract_files: Annotated[FrozenSequence[SafeRelativePath], Field(min_length=1, max_length=16)]
 
     @field_validator("capabilities", "contract_files")
     @classmethod
-    def validate_sorted_strings(cls, value: list[str]) -> list[str]:
+    def validate_sorted_strings(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_sorted_unique(value, "manifest list")
         return value
 
     @field_validator("tools")
     @classmethod
-    def validate_tools(cls, value: list[ToolDescriptor]) -> list[ToolDescriptor]:
+    def validate_tools(cls, value: tuple[ToolDescriptor, ...]) -> tuple[ToolDescriptor, ...]:
         ids = [tool.tool_id for tool in value]
         _require_sorted_unique(ids, "tools")
         return value
 
     @field_validator("mcp_servers")
     @classmethod
-    def validate_mcp_servers(cls, value: list[McpServerDescriptor]) -> list[McpServerDescriptor]:
+    def validate_mcp_servers(
+        cls, value: tuple[McpServerDescriptor, ...]
+    ) -> tuple[McpServerDescriptor, ...]:
         ids = [server.server_id for server in value]
         _require_sorted_unique(ids, "mcp_servers")
         return value
@@ -391,6 +525,15 @@ class TargetManifest(ContractModel):
         declared_mcp_tools = {tool.tool_id for tool in self.tools if tool.origin == "mcp"}
         if set(mcp_tool_ids) != declared_mcp_tools:
             raise ValueError("every MCP-origin tool must belong to exactly one declared server")
+
+        declared_tool_ids = set(tools)
+        unknown_permitted = (set(self.permissions.allow) | set(self.permissions.approval)) - (
+            declared_tool_ids
+        )
+        if unknown_permitted:
+            raise ValueError(
+                f"permission lists reference undeclared tools: {sorted(unknown_permitted)}"
+            )
 
         for tool in self.tools:
             if tool.permission_class == "DENIED":
@@ -416,12 +559,12 @@ class ScenarioAction(ContractModel):
 
 
 class ExpectedTrajectory(ContractModel):
-    required_order: Annotated[list[EventId], Field(min_length=1)]
-    forbidden_events: list[EventId]
+    required_order: Annotated[FrozenSequence[EventId], Field(min_length=1)]
+    forbidden_events: FrozenSequence[EventId]
 
     @field_validator("required_order", "forbidden_events")
     @classmethod
-    def validate_unique_events(cls, value: list[str]) -> list[str]:
+    def validate_unique_events(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "trajectory events")
         return value
 
@@ -438,7 +581,7 @@ class OutcomeAssertion(ContractModel):
         StringConstraints(pattern=r"^[a-z][a-z0-9._-]{0,127}$", strict=True),
     ]
     operator: Literal["absent", "contains", "equals", "less_than_or_equal", "present"]
-    value: JsonValue
+    value: ImmutableJsonValue
 
     @field_validator("value")
     @classmethod
@@ -449,11 +592,13 @@ class OutcomeAssertion(ContractModel):
 
 class ExpectedOutcome(ContractModel):
     summary: Annotated[str, StringConstraints(min_length=1, max_length=512, strict=True)]
-    assertions: Annotated[list[OutcomeAssertion], Field(min_length=1)]
+    assertions: Annotated[FrozenSequence[OutcomeAssertion], Field(min_length=1)]
 
     @field_validator("assertions")
     @classmethod
-    def validate_assertions(cls, value: list[OutcomeAssertion]) -> list[OutcomeAssertion]:
+    def validate_assertions(
+        cls, value: tuple[OutcomeAssertion, ...]
+    ) -> tuple[OutcomeAssertion, ...]:
         identities = [f"{item.field}:{item.operator}" for item in value]
         _require_unique(identities, "outcome assertions")
         return value
@@ -465,12 +610,12 @@ class ScenarioCleanup(ContractModel):
 
 
 class ScenarioEvaluator(ContractModel):
-    deterministic_rules: Annotated[list[RuleId], Field(min_length=1)]
+    deterministic_rules: Annotated[FrozenSequence[RuleId], Field(min_length=1)]
     semantic: Literal[False]
 
     @field_validator("deterministic_rules")
     @classmethod
-    def validate_rules(cls, value: list[str]) -> list[str]:
+    def validate_rules(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_sorted_unique(value, "deterministic_rules")
         return value
 
@@ -483,7 +628,7 @@ class Scenario(ContractModel):
     version: Literal["0.1.0"]
     kind: Literal["benign", "adversarial", "chaos"]
     threat_ids: Annotated[
-        list[
+        FrozenSequence[
             Annotated[
                 str,
                 StringConstraints(pattern=r"^AG-THR-[0-9]{3}$", strict=True),
@@ -496,24 +641,24 @@ class Scenario(ContractModel):
     confidence: Literal["designed_not_executed"]
     synthetic: Literal[True]
     real_data: Literal[False]
-    preconditions: Annotated[list[NonEmptyText], Field(min_length=1)]
+    preconditions: Annotated[FrozenSequence[NonEmptyText], Field(min_length=1)]
     action: ScenarioAction
     expected_trajectory: ExpectedTrajectory
     expected_outcome: ExpectedOutcome
-    forbidden_effects: list[EventId]
-    evidence_required: Annotated[list[EventId], Field(min_length=1)]
+    forbidden_effects: FrozenSequence[EventId]
+    evidence_required: Annotated[FrozenSequence[EventId], Field(min_length=1)]
     cleanup: ScenarioCleanup
     evaluator: ScenarioEvaluator
 
     @field_validator("threat_ids", "forbidden_effects", "evidence_required")
     @classmethod
-    def validate_sorted_identifiers(cls, value: list[str]) -> list[str]:
+    def validate_sorted_identifiers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "scenario identifier list")
-        return value
+        return tuple(sorted(value))
 
     @field_validator("preconditions")
     @classmethod
-    def validate_preconditions(cls, value: list[str]) -> list[str]:
+    def validate_preconditions(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "preconditions")
         return value
 
@@ -530,7 +675,7 @@ class Finding(ContractModel):
 
     finding_id: SafeOpaqueIdentifier
     rule_id: RuleId
-    requirement_ids: Annotated[list[RequirementId], Field(min_length=1)]
+    requirement_ids: Annotated[FrozenSequence[RequirementId], Field(min_length=1)]
     scenario_id: ScenarioId
     severity: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
     confidence: Literal["CONFIRMED", "PROBABLE", "POSSIBLE"]
@@ -547,20 +692,20 @@ class Finding(ContractModel):
         | None
     )
     title: Annotated[str, StringConstraints(min_length=1, max_length=200, strict=True)]
-    evidence_refs: Annotated[list[EvidenceReference], Field(min_length=1)]
-    reproduction: Annotated[list[NonEmptyText], Field(min_length=1)]
-    limitations: list[NonEmptyText]
+    evidence_refs: Annotated[FrozenSequence[EvidenceReference], Field(min_length=1)]
+    reproduction: Annotated[FrozenSequence[NonEmptyText], Field(min_length=1)]
+    limitations: FrozenSequence[NonEmptyText]
     run_id: SafeOpaqueIdentifier
 
     @field_validator("requirement_ids", "evidence_refs")
     @classmethod
-    def validate_sorted_references(cls, value: list[str]) -> list[str]:
+    def validate_sorted_references(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_sorted_unique(value, "finding reference list")
         return value
 
     @field_validator("reproduction", "limitations")
     @classmethod
-    def validate_unique_text(cls, value: list[str]) -> list[str]:
+    def validate_unique_text(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "finding text list")
         return value
 
@@ -578,7 +723,7 @@ class RunIdentity(ContractModel):
         str,
         StringConstraints(pattern=_CANDIDATE_PATTERN, strict=True),
     ]
-    ignored_oid: Sha256Hex
+    ignored_oid: GitOid
     manifest_sha256: Sha256Hex
     threat_catalog_version: SemanticVersion
     threat_catalog_sha256: Sha256Hex
@@ -634,12 +779,12 @@ class ScenarioResult(ContractModel):
     completed: bool
     passed: bool | None
     incomplete_reason: NonEmptyText | None
-    evidence_refs: list[EvidenceReference]
-    finding_ids: list[SafeOpaqueIdentifier]
+    evidence_refs: FrozenSequence[EvidenceReference]
+    finding_ids: FrozenSequence[SafeOpaqueIdentifier]
 
     @field_validator("evidence_refs", "finding_ids")
     @classmethod
-    def validate_sorted_lists(cls, value: list[str]) -> list[str]:
+    def validate_sorted_lists(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_sorted_unique(value, "scenario result reference list")
         return value
 
@@ -657,7 +802,7 @@ type MetricName = Annotated[
     str,
     StringConstraints(pattern=r"^[a-z][a-z0-9._-]{0,63}$", strict=True),
 ]
-type MetricValue = Annotated[int | float, Field(ge=0)]
+type MetricValue = Annotated[int | float, Field(ge=0, le=9_007_199_254_740_991)]
 
 
 class AssessmentSummary(ContractModel):
@@ -681,30 +826,34 @@ class AssessmentResult(ContractModel):
     target_id: LowerIdentifier
     timestamps: AssessmentTimestamps
     stop_reason: SafeReason
-    scenario_results: list[ScenarioResult]
-    findings: list[Finding]
-    metrics: dict[MetricName, MetricValue]
-    artifact_hashes: dict[SafeRelativePath, Sha256Hex]
+    scenario_results: Annotated[FrozenSequence[ScenarioResult], Field(min_length=1)]
+    findings: FrozenSequence[Finding]
+    metrics: FrozenMapping[MetricName, MetricValue]
+    artifact_hashes: FrozenMapping[SafeRelativePath, Sha256Hex]
     summary: AssessmentSummary
 
     @field_validator("metrics")
     @classmethod
-    def validate_metrics(cls, value: dict[str, int | float]) -> dict[str, int | float]:
+    def validate_metrics(cls, value: Mapping[str, int | float]) -> Mapping[str, int | float]:
         for metric in value.values():
-            if isinstance(metric, bool) or not math.isfinite(metric):
+            if isinstance(metric, bool) or (
+                isinstance(metric, float) and not math.isfinite(metric)
+            ):
                 raise ValueError("metrics must be finite non-negative numbers")
         return value
 
     @field_validator("scenario_results")
     @classmethod
-    def validate_scenario_results(cls, value: list[ScenarioResult]) -> list[ScenarioResult]:
+    def validate_scenario_results(
+        cls, value: tuple[ScenarioResult, ...]
+    ) -> tuple[ScenarioResult, ...]:
         ids = [result.scenario_id for result in value]
         _require_sorted_unique(ids, "scenario_results")
         return value
 
     @field_validator("findings")
     @classmethod
-    def validate_findings(cls, value: list[Finding]) -> list[Finding]:
+    def validate_findings(cls, value: tuple[Finding, ...]) -> tuple[Finding, ...]:
         ids = [finding.finding_id for finding in value]
         _require_sorted_unique(ids, "findings")
         return value
@@ -732,8 +881,31 @@ class AssessmentResult(ContractModel):
         if referenced_findings != findings.keys():
             raise ValueError("every finding must be referenced by its scenario result")
 
-        if self.summary.completed and any(not result.completed for result in self.scenario_results):
-            raise ValueError("completed assessment contains an incomplete scenario")
+        local_evidence_paths = {
+            local_path
+            for evidence_ref in (
+                ref for result in self.scenario_results for ref in result.evidence_refs
+            )
+            if (local_path := _local_evidence_path(evidence_ref)) is not None
+        }
+        local_evidence_paths.update(
+            local_path
+            for evidence_ref in (ref for finding in self.findings for ref in finding.evidence_refs)
+            if (local_path := _local_evidence_path(evidence_ref)) is not None
+        )
+        missing_hashes = local_evidence_paths - self.artifact_hashes.keys()
+        if missing_hashes:
+            raise ValueError(
+                f"local evidence references lack artifact hashes: {sorted(missing_hashes)}"
+            )
+
+        all_scenarios_completed = all(result.completed for result in self.scenario_results)
+        if self.summary.completed != all_scenarios_completed:
+            raise ValueError("summary.completed must match completion of every scenario result")
+        if self.summary.completed and self.stop_reason != "assessment completed":
+            raise ValueError("completed assessment requires stop_reason 'assessment completed'")
+        if not self.summary.completed and self.stop_reason == "assessment completed":
+            raise ValueError("incomplete assessment cannot use completed stop_reason")
         return self
 
 
