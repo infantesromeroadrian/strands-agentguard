@@ -30,6 +30,12 @@ from strands_agentguard import (
     canonical_json_bytes,
     canonical_sha256,
 )
+from strands_agentguard.contracts import (
+    DRAFT_2020_12_SCHEMA,
+    MAX_SAFE_INTEGER,
+    MIN_SAFE_INTEGER,
+    validate_contract_document,
+)
 
 ROOT = Path(__file__).parents[1]
 TARGET_FIXTURES = sorted((ROOT / "fixtures" / "targets").glob("*.json"))
@@ -38,6 +44,29 @@ SCENARIO_FIXTURES = sorted((ROOT / "fixtures" / "scenarios" / "v0.1.0").glob("ag
 
 def load_json(path: Path) -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+
+
+def add_explicit_dialect(tool_payload: dict[str, Any]) -> dict[str, Any]:
+    payload = deepcopy(tool_payload)
+    payload["input_schema"]["$schema"] = DRAFT_2020_12_SCHEMA
+    payload["fingerprint"] = ToolDescriptor.fingerprint_for(
+        name=payload["name"],
+        description=payload["description"],
+        input_schema=payload["input_schema"],
+    )
+    return payload
+
+
+def valid_tool_payload(index: int = 0) -> dict[str, Any]:
+    target = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    return add_explicit_dialect(cast(dict[str, Any], target["tools"][index]))
+
+
+def valid_target_payload(fixture_path: Path | None = None) -> dict[str, Any]:
+    path = fixture_path or ROOT / "fixtures" / "targets" / "hardened.json"
+    payload = load_json(path)
+    payload["tools"] = [add_explicit_dialect(tool) for tool in payload["tools"]]
+    return payload
 
 
 def valid_finding_payload() -> dict[str, Any]:
@@ -109,7 +138,7 @@ def valid_assessment() -> AssessmentResult:
 
 
 @pytest.mark.parametrize("fixture_path", TARGET_FIXTURES, ids=lambda path: path.stem)
-def test_target_fixtures_satisfy_strict_model(fixture_path: Path) -> None:
+def test_migrated_target_fixtures_satisfy_strict_model(fixture_path: Path) -> None:
     manifest = TargetManifest.model_validate_json(fixture_path.read_text(encoding="utf-8"))
 
     assert manifest.schema_version == "0.1.0"
@@ -126,7 +155,7 @@ def test_scenario_fixtures_satisfy_strict_model(fixture_path: Path) -> None:
 
 
 def test_tool_fingerprint_has_known_vector_and_terminal_lf() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
     descriptor = ToolDescriptor.model_validate(payload)
     material = {
         "name": payload["name"],
@@ -135,7 +164,7 @@ def test_tool_fingerprint_has_known_vector_and_terminal_lf() -> None:
     }
 
     assert descriptor.fingerprint == (
-        "ae09a48de73c4eef665de7882dcf3c159a47867929b89171be1f1a9c2d870d77"
+        "b742eaadeab321b08386311af91590c3d35acc11f6f590a1201ab0aae709231c"
     )
     assert descriptor.fingerprint == canonical_sha256_bytes_with_lf(material)
     assert descriptor.fingerprint != canonical_sha256(material)
@@ -147,7 +176,7 @@ def canonical_sha256_bytes_with_lf(value: Any) -> str:
 
 @pytest.mark.parametrize("changed_field", ["description", "input_schema"])
 def test_tool_fingerprint_is_sensitive_to_registered_surface(changed_field: str) -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
     changed = deepcopy(payload)
     if changed_field == "description":
         changed["description"] = f"{changed['description']} Changed."
@@ -159,7 +188,7 @@ def test_tool_fingerprint_is_sensitive_to_registered_surface(changed_field: str)
 
 
 def test_tool_fingerprint_excludes_policy_metadata() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
 
     assert ToolDescriptor.fingerprint_for(
         name=payload["name"],
@@ -188,7 +217,7 @@ def test_target_manifest_rejects_unsafe_or_ambiguous_data(
     mutation: Any,
     error: str,
 ) -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    payload = valid_target_payload()
     mutation(payload)
 
     with pytest.raises(ValidationError, match=error):
@@ -196,7 +225,7 @@ def test_target_manifest_rejects_unsafe_or_ambiguous_data(
 
 
 def test_target_manifest_rejects_secret_shaped_provider_extension() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    payload = valid_target_payload()
     payload["provider"]["api_key"] = "private-value"
 
     with pytest.raises(ValidationError, match="extra_forbidden"):
@@ -204,7 +233,7 @@ def test_target_manifest_rejects_secret_shaped_provider_extension() -> None:
 
 
 def test_target_manifest_rejects_permission_reference_mismatch() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    payload = valid_target_payload()
     payload["permissions"]["approval"] = []
 
     with pytest.raises(ValidationError, match="permission lists"):
@@ -284,11 +313,21 @@ def test_run_identity_rejects_changed_material_and_invalid_oids() -> None:
     with pytest.raises(ValidationError, match="agentguard_candidate"):
         RunIdentity.model_validate(abbreviated)
 
-    mismatched_ignored = valid_run_identity_payload()
-    mismatched_ignored["ignored_oid"] = "3" * 64
-    mismatched_ignored["identity_digest"] = RunIdentity.digest_for(mismatched_ignored)
+
+@pytest.mark.parametrize("candidate_field", ["agentguard_candidate", "target_candidate"])
+def test_run_identity_rejects_embedded_ignored_oid_mismatch_with_canonical_parity(
+    candidate_field: str,
+) -> None:
+    payload = valid_run_identity_payload()
+    payload[candidate_field] = f"commit:{'a' * 40}:{'c' * 40}"
+    payload["identity_digest"] = RunIdentity.digest_for(payload)
+
     with pytest.raises(ValidationError, match="embedded ignored_oid"):
-        RunIdentity.model_validate(mismatched_ignored)
+        RunIdentity.model_validate(payload)
+    # Cross-field equality is not expressible in standard Draft 2020-12.
+    validate_schema("run-identity.schema.json", payload)
+    with pytest.raises(ValidationError, match="embedded ignored_oid"):
+        validate_contract("run-identity.schema.json", payload)
 
 
 def test_assessment_result_round_trips_as_source_json() -> None:
@@ -394,7 +433,7 @@ def test_json_schema_top_level_matches_model_contract(
 
 def test_json_schemas_accept_representative_contracts_and_fixtures() -> None:
     schemas, registry = schema_registry()
-    target = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    target = valid_target_payload()
     scenario = load_json(SCENARIO_FIXTURES[0])
     run_identity = RunIdentity.model_validate(valid_run_identity_payload())
     finding = Finding.model_validate(valid_finding_payload())
@@ -409,14 +448,16 @@ def test_json_schemas_accept_representative_contracts_and_fixtures() -> None:
     }
 
     for schema_name, instance in examples.items():
-        Draft202012Validator(schemas[schema_name], registry=registry).validate(instance)
+        validator = Draft202012Validator(schemas[schema_name], registry=registry)
+        validator.validate(instance)
+        validate_contract_document(schema_name, instance, schema_validator=validator)
 
     target_validator = Draft202012Validator(
         schemas["target-manifest.schema.json"], registry=registry
     )
     scenario_validator = Draft202012Validator(schemas["scenario.schema.json"], registry=registry)
     for fixture_path in TARGET_FIXTURES:
-        target_validator.validate(load_json(fixture_path))
+        target_validator.validate(valid_target_payload(fixture_path))
     for fixture_path in SCENARIO_FIXTURES:
         scenario_validator.validate(load_json(fixture_path))
 
@@ -429,12 +470,19 @@ def test_every_schema_is_valid_draft_2020_12() -> None:
     schemas, _ = schema_registry()
 
     for schema in schemas.values():
+        assert schema["$schema"] == DRAFT_2020_12_SCHEMA
         Draft202012Validator.check_schema(schema)
 
 
 def validate_schema(schema_name: str, instance: Any) -> None:
     schemas, registry = schema_registry()
     Draft202012Validator(schemas[schema_name], registry=registry).validate(instance)
+
+
+def validate_contract(schema_name: str, instance: Any) -> BaseModel:
+    schemas, registry = schema_registry()
+    validator = Draft202012Validator(schemas[schema_name], registry=registry)
+    return validate_contract_document(schema_name, instance, schema_validator=validator)
 
 
 @pytest.mark.parametrize("oid_length", [40, 64])
@@ -457,7 +505,7 @@ def test_candidate_identities_must_be_tagged(candidate: str) -> None:
     with pytest.raises(JsonSchemaValidationError):
         validate_schema("run-identity.schema.json", run_payload)
 
-    target_payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    target_payload = valid_target_payload()
     target_payload["candidate_identity"] = candidate
     with pytest.raises(ValidationError, match="candidate_identity"):
         TargetManifest.model_validate(target_payload)
@@ -479,16 +527,20 @@ def test_candidate_git_oid_widths_must_match() -> None:
 
 @pytest.mark.parametrize("permission_list", ["allow", "approval"])
 def test_permissive_lists_reject_undeclared_tool_ids(permission_list: str) -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    payload = valid_target_payload()
     payload["permissions"][permission_list].append("undeclared_tool")
     payload["permissions"][permission_list].sort()
 
     with pytest.raises(ValidationError, match="undeclared tools"):
         TargetManifest.model_validate(payload)
+    # Cross-array membership is not expressible in standard Draft 2020-12.
+    validate_schema("target-manifest.schema.json", payload)
+    with pytest.raises(ValidationError, match="undeclared tools"):
+        validate_contract("target-manifest.schema.json", payload)
 
 
 def test_deny_may_retain_disjoint_ambient_capabilities() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    payload = valid_target_payload()
 
     manifest = TargetManifest.model_validate(payload)
 
@@ -510,7 +562,7 @@ def test_tool_policy_matrix_accepts_only_declared_states(
     effect_class: str,
     approval_required: bool,
 ) -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
     payload.update(
         permission_class=permission_class,
         effect_class=effect_class,
@@ -537,7 +589,7 @@ def test_tool_policy_matrix_rejects_all_other_states(
     effect_class: str,
     approval_required: bool,
 ) -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
     payload.update(
         permission_class=permission_class,
         effect_class=effect_class,
@@ -551,19 +603,19 @@ def test_tool_policy_matrix_rejects_all_other_states(
 
 
 def test_model_validate_json_rejects_duplicate_keys_at_nested_depth() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
     raw = json.dumps(payload).replace(
         '"type": "object"',
         '"type": "object", "type": "array"',
         1,
     )
 
-    with pytest.raises(ValueError, match="duplicate JSON key: 'type'"):
+    with pytest.raises(ValidationError, match="duplicate JSON key: 'type'"):
         ToolDescriptor.model_validate_json(raw)
 
 
 def test_models_deep_freeze_nested_contract_data() -> None:
-    target_payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")
+    target_payload = valid_target_payload()
     manifest = TargetManifest.model_validate(target_payload)
     descriptor = manifest.tools[0]
     assessment = valid_assessment()
@@ -588,7 +640,7 @@ def test_models_deep_freeze_nested_contract_data() -> None:
 
 
 def test_input_schema_must_be_valid_draft_2020_12() -> None:
-    payload = load_json(ROOT / "fixtures" / "targets" / "hardened.json")["tools"][0]
+    payload = valid_tool_payload()
     payload["input_schema"]["required"] = "scenario_id"
     payload["fingerprint"] = ToolDescriptor.fingerprint_for(
         name=payload["name"],
@@ -602,12 +654,58 @@ def test_input_schema_must_be_valid_draft_2020_12() -> None:
         validate_schema("tool-descriptor.schema.json", payload)
 
 
+@pytest.mark.parametrize(
+    "dialect",
+    [
+        None,
+        "http://json-schema.org/draft-07/schema#",
+        "https://example.invalid/unknown-schema",
+    ],
+)
+def test_input_schema_must_declare_exact_draft_2020_12_dialect(
+    dialect: str | None,
+) -> None:
+    payload = valid_tool_payload()
+    if dialect is None:
+        payload["input_schema"].pop("$schema")
+    else:
+        payload["input_schema"]["$schema"] = dialect
+    payload["fingerprint"] = ToolDescriptor.fingerprint_for(
+        name=payload["name"],
+        description=payload["description"],
+        input_schema=payload["input_schema"],
+    )
+
+    if dialect is not None:
+        # jsonschema's check_schema validates under the selected validator; it
+        # does not require the document's own declaration to match that draft.
+        Draft202012Validator.check_schema(payload["input_schema"])
+    with pytest.raises(ValidationError, match=r"input_schema\.\$schema"):
+        ToolDescriptor.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("tool-descriptor.schema.json", payload)
+
+
+def test_input_schema_accepts_exact_draft_2020_12_dialect() -> None:
+    payload = valid_tool_payload()
+
+    descriptor = ToolDescriptor.model_validate(payload)
+    validated = validate_contract("tool-descriptor.schema.json", payload)
+
+    assert descriptor.input_schema["$schema"] == DRAFT_2020_12_SCHEMA
+    assert isinstance(validated, ToolDescriptor)
+
+
 def test_local_evidence_requires_matching_artifact_hash() -> None:
     payload = json.loads(valid_assessment().model_dump_json())
     payload["artifact_hashes"] = {}
 
     with pytest.raises(ValidationError, match="lack artifact hashes"):
         AssessmentResult.model_validate_json(json.dumps(payload))
+    # Membership between evidence refs and object keys is semantic.
+    validate_schema("assessment-result.schema.json", payload)
+    with pytest.raises(ValidationError, match="lack artifact hashes"):
+        validate_contract("assessment-result.schema.json", payload)
 
 
 def test_external_evidence_does_not_require_local_artifact_hash() -> None:
@@ -619,8 +717,10 @@ def test_external_evidence_does_not_require_local_artifact_hash() -> None:
 
     result = AssessmentResult.model_validate_json(json.dumps(payload))
     validate_schema("assessment-result.schema.json", payload)
+    validated = validate_contract("assessment-result.schema.json", payload)
 
     assert result.artifact_hashes == {}
+    assert isinstance(validated, AssessmentResult)
 
 
 @pytest.mark.parametrize("reference", ["file:///etc/passwd", "FILE:///etc/passwd", "FiLe:x"])
@@ -634,6 +734,26 @@ def test_file_uri_is_rejected_case_insensitively(reference: str) -> None:
         validate_schema("finding.schema.json", payload)
 
 
+@pytest.mark.parametrize("reference", ["C:/private/evidence.json", "C:\\private\\evidence.json"])
+def test_windows_drive_evidence_is_local_and_cannot_bypass_hash_policy(reference: str) -> None:
+    finding_payload = valid_finding_payload()
+    finding_payload["evidence_refs"] = [reference]
+
+    with pytest.raises(ValidationError, match="Windows drive paths are local evidence"):
+        Finding.model_validate(finding_payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("finding.schema.json", finding_payload)
+
+    assessment_payload = json.loads(valid_assessment().model_dump_json())
+    assessment_payload["scenario_results"][0]["evidence_refs"] = [reference]
+    assessment_payload["findings"][0]["evidence_refs"] = [reference]
+    assessment_payload["artifact_hashes"] = {}
+    with pytest.raises(ValidationError, match="Windows drive paths are local evidence"):
+        AssessmentResult.model_validate(assessment_payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("assessment-result.schema.json", assessment_payload)
+
+
 def test_huge_integer_metric_is_a_stable_validation_error() -> None:
     payload = json.loads(valid_assessment().model_dump_json())
     payload["metrics"]["huge"] = 10**1000
@@ -644,7 +764,54 @@ def test_huge_integer_metric_is_a_stable_validation_error() -> None:
         validate_schema("assessment-result.schema.json", payload)
 
 
-def test_scenario_set_like_collections_are_unique_and_canonicalized() -> None:
+@pytest.mark.parametrize(
+    "value",
+    [MAX_SAFE_INTEGER + 1, MIN_SAFE_INTEGER - 1, float(MAX_SAFE_INTEGER + 1)],
+)
+def test_canonical_json_rejects_integers_outside_interoperable_range(value: int | float) -> None:
+    with pytest.raises(ValueError, match="JSON integers must be between"):
+        canonical_json_bytes({"nested": [value]})
+
+
+def test_canonical_json_accepts_safe_integer_boundaries() -> None:
+    assert canonical_json_bytes({"maximum": MAX_SAFE_INTEGER, "minimum": MIN_SAFE_INTEGER}) == (
+        b'{"maximum":9007199254740991,"minimum":-9007199254740991}'
+    )
+
+
+@pytest.mark.parametrize("location", ["action", "assertion"])
+def test_scenario_free_json_rejects_unsafe_nested_integers(location: str) -> None:
+    payload = load_json(SCENARIO_FIXTURES[0])
+    unsafe = {"nested": [MAX_SAFE_INTEGER + 1]}
+    if location == "action":
+        payload["action"]["input"] = unsafe
+    else:
+        payload["expected_outcome"]["assertions"][0]["value"] = unsafe
+
+    with pytest.raises(ValidationError, match="JSON integers must be between"):
+        Scenario.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("scenario.schema.json", payload)
+
+
+def test_tool_input_schema_rejects_unsafe_integer_keywords() -> None:
+    payload = valid_tool_payload()
+    payload["input_schema"]["x-agentguard-test-integer"] = MAX_SAFE_INTEGER + 1
+    with pytest.raises(ValueError, match="JSON integers must be between"):
+        ToolDescriptor.fingerprint_for(
+            name=payload["name"],
+            description=payload["description"],
+            input_schema=payload["input_schema"],
+        )
+    payload["fingerprint"] = "0" * 64
+
+    with pytest.raises(ValidationError, match="JSON integers must be between"):
+        ToolDescriptor.model_validate(payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("tool-descriptor.schema.json", payload)
+
+
+def test_scenario_set_like_collections_normalize_to_canonical_persisted_order() -> None:
     payload = load_json(SCENARIO_FIXTURES[0])
     payload["threat_ids"] = ["AG-THR-999", payload["threat_ids"][0]]
     payload["forbidden_effects"] = ["z_event", "a_event"]
@@ -652,16 +819,64 @@ def test_scenario_set_like_collections_are_unique_and_canonicalized() -> None:
 
     scenario = Scenario.model_validate(payload)
     validate_schema("scenario.schema.json", payload)
+    validated = validate_contract("scenario.schema.json", payload)
 
     assert scenario.threat_ids == tuple(sorted(payload["threat_ids"]))
-    assert scenario.forbidden_effects == ("a_event", "z_event")
-    assert scenario.evidence_required == ("a_evidence", "z_evidence")
+    assert scenario.forbidden_effects == tuple(sorted(payload["forbidden_effects"]))
+    assert scenario.evidence_required == tuple(sorted(payload["evidence_required"]))
+    assert isinstance(validated, Scenario)
+    assert validated.model_dump(mode="json")["threat_ids"] == sorted(payload["threat_ids"])
 
     payload["evidence_required"] = ["duplicate", "duplicate"]
     with pytest.raises(ValidationError, match="duplicates"):
         Scenario.model_validate(payload)
     with pytest.raises(JsonSchemaValidationError):
         validate_schema("scenario.schema.json", payload)
+
+
+def test_permission_and_finding_sets_reject_noncanonical_order() -> None:
+    target_payload = valid_target_payload()
+    target_payload["permissions"]["allow"].reverse()
+    with pytest.raises(ValidationError, match="sorted lexicographically"):
+        TargetManifest.model_validate(target_payload)
+    validate_schema("target-manifest.schema.json", target_payload)
+    with pytest.raises(ValidationError, match="sorted lexicographically"):
+        validate_contract("target-manifest.schema.json", target_payload)
+
+    finding_payload = valid_finding_payload()
+    finding_payload["requirement_ids"].reverse()
+    with pytest.raises(ValidationError, match="sorted lexicographically"):
+        Finding.model_validate(finding_payload)
+    validate_schema("finding.schema.json", finding_payload)
+    with pytest.raises(ValidationError, match="sorted lexicographically"):
+        validate_contract("finding.schema.json", finding_payload)
+
+
+def test_assessment_finding_references_reject_noncanonical_order() -> None:
+    payload = json.loads(valid_assessment().model_dump_json())
+    second_finding = deepcopy(payload["findings"][0])
+    second_finding["finding_id"] = "finding-002"
+    payload["findings"].append(second_finding)
+    payload["scenario_results"][0]["finding_ids"] = ["finding-002", "finding-001"]
+
+    with pytest.raises(ValidationError, match="sorted lexicographically"):
+        AssessmentResult.model_validate(payload)
+    validate_schema("assessment-result.schema.json", payload)
+    with pytest.raises(ValidationError, match="sorted lexicographically"):
+        validate_contract("assessment-result.schema.json", payload)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [ToolDescriptor, TargetManifest, Scenario, Finding, RunIdentity, AssessmentResult],
+)
+@pytest.mark.parametrize("malformed", ["{", b'{"unterminated":', b"\xff"])
+def test_model_validate_json_wraps_malformed_json_as_pydantic_validation_error(
+    model: type[BaseModel],
+    malformed: str | bytes,
+) -> None:
+    with pytest.raises(ValidationError):
+        model.model_validate_json(malformed)
 
 
 def incomplete_assessment_payload() -> dict[str, Any]:

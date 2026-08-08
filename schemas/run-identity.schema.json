@@ -3,7 +3,7 @@
   "$id": "run-identity.schema.json",
   "title": "Strands AgentGuard RunIdentity",
   "description": "Closed v0.1.0 identity for reproducible assessment inputs. identity_digest is SHA-256 of compact, key-sorted UTF-8 JSON excluding identity_digest and without a terminal LF.",
-  "$comment": "Pydantic additionally verifies identity_digest and embedded ignored_oid consistency. Timestamps deliberately live outside this digest.",
+  "$comment": "Standard Draft 2020-12 cannot compare the ignored_oid field with the final OID embedded in candidate strings. The canonical contracts.validate_contract_document surface verifies that consistency and identity_digest. Timestamps deliberately live outside this digest.",
   "type": "object",
   "additionalProperties": false,
   "required": [

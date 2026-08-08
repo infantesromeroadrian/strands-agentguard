@@ -32,12 +32,17 @@ from pydantic import (
     JsonValue,
     PlainSerializer,
     StringConstraints,
+    ValidationError,
     field_validator,
     model_validator,
 )
 from pydantic.config import ExtraValues
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 SCHEMA_VERSION = "0.1.0"
+DRAFT_2020_12_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
+MIN_SAFE_INTEGER = -9_007_199_254_740_991
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 
 def _to_tuple(value: object) -> object:
@@ -211,6 +216,10 @@ type SafeRelativePath = Annotated[
 
 def _validate_evidence_reference(value: str) -> str:
     normalized = value.replace("#", "/")
+    if _is_windows_drive_reference(value):
+        raise ValueError(
+            "Windows drive paths are local evidence and must use normalized relative POSIX paths"
+        )
     parsed = urlsplit(value)
     if (
         value.startswith(("/", "\\"))
@@ -226,9 +235,21 @@ def _validate_evidence_reference(value: str) -> str:
 
 
 def _local_evidence_path(value: str) -> str | None:
+    if _is_windows_drive_reference(value):
+        return value.partition("#")[0]
     if urlsplit(value).scheme:
         return None
     return value.partition("#")[0]
+
+
+def _is_windows_drive_reference(value: str) -> bool:
+    reference = value.partition("#")[0]
+    return (
+        len(reference) >= 3
+        and reference[0].isalpha()
+        and reference[1] == ":"
+        and reference[2] in {"/", "\\"}
+    )
 
 
 type EvidenceReference = Annotated[
@@ -251,8 +272,14 @@ def canonical_json_bytes(value: object) -> bytes:
     """
 
     try:
+        thawed = _thaw_json(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("value is not canonical JSON") from exc
+
+    _validate_safe_json_numbers(thawed)
+    try:
         serialized = json.dumps(
-            _thaw_json(value),
+            thawed,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -261,6 +288,34 @@ def canonical_json_bytes(value: object) -> bytes:
     except (TypeError, ValueError) as exc:
         raise ValueError("value is not canonical JSON") from exc
     return serialized.encode("utf-8")
+
+
+def _validate_safe_json_numbers(value: object) -> None:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return
+    if isinstance(value, int):
+        if not MIN_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER:
+            raise ValueError(
+                f"JSON integers must be between {MIN_SAFE_INTEGER} and {MAX_SAFE_INTEGER}"
+            )
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("JSON numbers must be finite")
+        if value.is_integer() and not MIN_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER:
+            raise ValueError(
+                f"JSON integers must be between {MIN_SAFE_INTEGER} and {MAX_SAFE_INTEGER}"
+            )
+        return
+    if isinstance(value, Mapping):
+        for item in value.values():
+            _validate_safe_json_numbers(item)
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _validate_safe_json_numbers(item)
+        return
+    raise TypeError(f"unsupported JSON value: {type(value).__name__}")
 
 
 def canonical_sha256(value: object) -> str:
@@ -302,11 +357,33 @@ class ContractModel(BaseModel):
             result: dict[str, Any] = {}
             for key, value in pairs:
                 if key in result:
-                    raise ValueError(f"duplicate JSON key: {key!r}")
+                    error = InitErrorDetails(
+                        type=PydanticCustomError(
+                            "json_duplicate_key",
+                            "duplicate JSON key: {key}",
+                            {"key": repr(key)},
+                        ),
+                        loc=(),
+                        input=json_data,
+                    )
+                    raise ValidationError.from_exception_data(cls.__name__, [error])
                 result[key] = value
             return result
 
-        json.loads(json_data, object_pairs_hook=reject_duplicates)
+        try:
+            json.loads(json_data, object_pairs_hook=reject_duplicates)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # Pydantic owns the public error contract for malformed JSON.
+            # Reparse through pydantic-core so callers consistently receive
+            # pydantic.ValidationError rather than stdlib parser exceptions.
+            return super().model_validate_json(
+                json_data,
+                strict=strict,
+                extra=extra,
+                context=context,
+                by_alias=by_alias,
+                by_name=by_name,
+            )
         return super().model_validate_json(
             json_data,
             strict=strict,
@@ -368,6 +445,8 @@ class ToolDescriptor(ContractModel):
     @classmethod
     def validate_input_schema(cls, value: JsonObject) -> JsonObject:
         canonical_json_bytes(value)
+        if value.get("$schema") != DRAFT_2020_12_SCHEMA:
+            raise ValueError(f"input_schema.$schema must be exactly {DRAFT_2020_12_SCHEMA!r}")
         if value.get("type") != "object":
             raise ValueError("input_schema.type must be 'object'")
         if value.get("additionalProperties") is not False:
@@ -567,6 +646,12 @@ class ExpectedTrajectory(ContractModel):
     def validate_unique_events(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "trajectory events")
         return value
+
+    @field_validator("forbidden_events")
+    @classmethod
+    def validate_forbidden_event_order(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        _require_unique(value, "forbidden trajectory events")
+        return tuple(sorted(value))
 
     @model_validator(mode="after")
     def validate_disjoint(self) -> Self:
@@ -909,7 +994,55 @@ class AssessmentResult(ContractModel):
         return self
 
 
+_CONTRACT_MODELS_BY_SCHEMA_ID: Mapping[str, type[ContractModel]] = MappingProxyType(
+    {
+        "assessment-result.schema.json": AssessmentResult,
+        "finding.schema.json": Finding,
+        "run-identity.schema.json": RunIdentity,
+        "scenario.schema.json": Scenario,
+        "target-manifest.schema.json": TargetManifest,
+        "tool-descriptor.schema.json": ToolDescriptor,
+    }
+)
+
+
+def validate_contract_document(
+    schema_id: str,
+    document: object,
+    *,
+    schema_validator: Draft202012Validator,
+) -> ContractModel:
+    """Validate one persisted document against schema and semantic invariants.
+
+    Standard Draft 2020-12 cannot express this contract's cross-field equality,
+    referential integrity, lexicographic set ordering, digest, fingerprint, or
+    local-evidence-to-artifact-hash membership rules.  This is the canonical
+    validation surface when those invariants matter: it first applies the
+    caller's configured checked-in schema (including its reference registry),
+    then the corresponding immutable Pydantic model.
+    """
+
+    model = _CONTRACT_MODELS_BY_SCHEMA_ID.get(schema_id)
+    if model is None:
+        raise ValueError(f"unknown contract schema: {schema_id!r}")
+
+    schema = schema_validator.schema
+    if not isinstance(schema, Mapping):
+        raise ValueError("contract schema must be a JSON object")
+    if schema.get("$schema") != DRAFT_2020_12_SCHEMA:
+        raise ValueError(f"contract schema must declare exactly {DRAFT_2020_12_SCHEMA!r}")
+    if schema.get("$id") != schema_id:
+        raise ValueError("schema validator does not match the requested contract schema")
+
+    Draft202012Validator.check_schema(schema)
+    schema_validator.validate(document)
+    return model.model_validate_json(canonical_json_bytes(document))
+
+
 __all__ = [
+    "DRAFT_2020_12_SCHEMA",
+    "MAX_SAFE_INTEGER",
+    "MIN_SAFE_INTEGER",
     "SCHEMA_VERSION",
     "AssessmentResult",
     "AssessmentSummary",
@@ -931,4 +1064,5 @@ __all__ = [
     "ToolDescriptor",
     "canonical_json_bytes",
     "canonical_sha256",
+    "validate_contract_document",
 ]

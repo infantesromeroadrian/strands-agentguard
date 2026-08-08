@@ -3,7 +3,7 @@
   "$id": "target-manifest.schema.json",
   "title": "Strands AgentGuard TargetManifest",
   "description": "Versioned, closed manifest for one synthetic or read-only assessment target.",
-  "$comment": "Pydantic additionally enforces sorted unique IDs, disjoint permissions, allow/approval references to declared tools, tool-to-MCP membership, and permission classification. deny may include ambient capabilities.",
+  "$comment": "Standard Draft 2020-12 cannot compare permission entries with tools or impose lexicographic array order. The canonical contracts.validate_contract_document surface enforces sorted unique IDs, disjoint permissions, allow/approval references to declared tools, tool-to-MCP membership, and permission classification. deny may include ambient capabilities.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -38,7 +38,8 @@
     "permissionList": {
       "type": "array",
       "items": {"$ref": "#/$defs/lowerIdentifier"},
-      "uniqueItems": true
+      "uniqueItems": true,
+      "x-agentguard-order": "lexicographic"
     }
   },
   "properties": {
@@ -74,11 +75,13 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
+      "x-agentguard-order": "tool_id",
       "items": {"$ref": "tool-descriptor.schema.json"}
     },
     "mcp_servers": {
       "type": "array",
       "uniqueItems": true,
+      "x-agentguard-order": "server_id",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -94,6 +97,7 @@
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
+            "x-agentguard-order": "lexicographic",
             "items": {"$ref": "#/$defs/lowerIdentifier"}
           },
           "fingerprint": {
@@ -145,6 +149,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
+      "x-agentguard-order": "lexicographic",
       "items": {"$ref": "#/$defs/lowerIdentifier"}
     },
     "contract_files": {
@@ -152,6 +157,7 @@
       "minItems": 1,
       "maxItems": 16,
       "uniqueItems": true,
+      "x-agentguard-order": "lexicographic",
       "items": {"$ref": "#/$defs/safeRelativePath"}
     }
   }

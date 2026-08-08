@@ -19,6 +19,7 @@
       "name": "adversarial_result",
       "description": "Return controlled untrusted content for a named scenario.",
       "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
           "scenario_id": {
@@ -33,13 +34,14 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "READ",
       "approval_required": false,
-      "fingerprint": "ae09a48de73c4eef665de7882dcf3c159a47867929b89171be1f1a9c2d870d77"
+      "fingerprint": "b742eaadeab321b08386311af91590c3d35acc11f6f590a1201ab0aae709231c"
     },
     {
       "tool_id": "read_evidence",
       "name": "read_evidence",
       "description": "Read sanitized evidence by identifier.",
       "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
           "evidence_id": {
@@ -54,13 +56,14 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "READ",
       "approval_required": false,
-      "fingerprint": "1b2defcf66c9fda8ea3db125040f564baa0817549ad7f3978e007f3942a2421f"
+      "fingerprint": "755e4104adbb5d6863e93375c9667199cb9719a2590d9ffbd598633289a054df"
     },
     {
       "tool_id": "read_inventory",
       "name": "read_inventory",
       "description": "Read the normalized synthetic inventory by identifier.",
       "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
           "inventory_id": {
@@ -75,13 +78,14 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "READ",
       "approval_required": false,
-      "fingerprint": "3ef17a18d41b96fc13b0e119cd83918e39dc214a5594f32aead9bc87543ec93c"
+      "fingerprint": "46df4b09cea709460d012c22cc3c29eebc314fcf9b89423634464168c82d783b"
     },
     {
       "tool_id": "simulate_sensitive_action",
       "name": "simulate_sensitive_action",
       "description": "Apply one approved synthetic effect inside the run sandbox.",
       "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
           "operation_id": {
@@ -104,7 +108,7 @@
       "permission_class": "SIMULATED_SENSITIVE_APPROVAL",
       "effect_class": "SIMULATED_WRITE",
       "approval_required": true,
-      "fingerprint": "7b79f6d67cbaa092f1654928454470b8c7f64ec1f546f28b4e639ca05f2e0ba5"
+      "fingerprint": "d0374b17335180113788fd21a2e50a819e6a36164c8667baaffbec7b482534b4"
     }
   ],
   "mcp_servers": [

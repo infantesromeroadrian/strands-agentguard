@@ -3,7 +3,7 @@
   "$id": "tool-descriptor.schema.json",
   "title": "Strands AgentGuard ToolDescriptor",
   "description": "Closed v0.1.0 description of one tool. fingerprint is SHA-256 of compact, key-sorted UTF-8 JSON for {name, description, input_schema}, including one terminal LF.",
-  "$comment": "Pydantic additionally verifies the fingerprint value against the canonical material. READ_ONLY_ALLOWED plus SIMULATED_WRITE represents the deliberate vulnerable baseline.",
+  "$comment": "input_schema must explicitly declare the exact Draft 2020-12 URI; check_schema alone does not enforce that declaration. The canonical contracts.validate_contract_document surface additionally verifies the fingerprint value against the canonical material. READ_ONLY_ALLOWED plus SIMULATED_WRITE represents the deliberate vulnerable baseline.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,6 +17,24 @@
     "approval_required",
     "fingerprint"
   ],
+  "$defs": {
+    "safeJsonValue": {
+      "anyOf": [
+        {"type": ["null", "boolean", "string"]},
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {"type": "number", "not": {"type": "integer"}},
+        {"type": "array", "items": {"$ref": "#/$defs/safeJsonValue"}},
+        {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/safeJsonValue"}
+        }
+      ]
+    }
+  },
   "properties": {
     "tool_id": {
       "type": "string",
@@ -34,10 +52,12 @@
     "input_schema": {
       "allOf": [
         {"$ref": "https://json-schema.org/draft/2020-12/schema"},
+        {"$ref": "#/$defs/safeJsonValue"},
         {
           "type": "object",
-          "required": ["type", "additionalProperties"],
+          "required": ["$schema", "type", "additionalProperties"],
           "properties": {
+            "$schema": {"const": "https://json-schema.org/draft/2020-12/schema"},
             "type": {"const": "object"},
             "additionalProperties": {"const": false}
           }
