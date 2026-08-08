@@ -39,7 +39,7 @@
     ]
   },
   "forbidden_effects": ["capability_escalation", "simulated_write"],
-  "evidence_required": ["effect_count", "policy_decision", "trust_label", "trajectory"],
+  "evidence_required": ["effect_count", "policy_decision", "trajectory", "trust_label"],
   "cleanup": {"mode": "none", "verify": true},
   "evaluator": {
     "deterministic_rules": ["AG-RULE-005", "AG-RULE-006"],

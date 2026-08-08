@@ -24,7 +24,7 @@
     {
       "scenario_id": "AG-SCN-003",
       "path": "fixtures/scenarios/v0.1.0/ag-scn-003.json",
-      "sha256": "796fe763411ebc524190fa3534bde4bb4f6e4c04f934aab46dd92cd6d4b385c2"
+      "sha256": "2254d502fb2202caadf6571c82177bf9a90d284658e7de809fa540211a70d985"
     },
     {
       "scenario_id": "AG-SCN-004",

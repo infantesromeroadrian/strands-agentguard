@@ -3,7 +3,7 @@
   "$id": "scenario.schema.json",
   "title": "Strands AgentGuard Scenario",
   "description": "Closed v0.1.0 synthetic assessment scenario with a predeclared expected trajectory, outcome, evidence, and cleanup contract.",
-  "$comment": "Standard Draft 2020-12 cannot impose lexicographic array order or compare fixture_ref with scenario_id. The canonical contracts.validate_contract_document surface checks relational invariants and returns a model whose set-like arrays are normalized according to x-agentguard-order for persisted output.",
+  "$comment": "Standard Draft 2020-12 cannot impose lexicographic array order or compare fixture_ref with scenario_id. The canonical contracts.validate_contract_document surface checks those invariants. It normalizes threat_ids and forbidden_effects for persisted output, but treats evidence_required as canonical input and rejects non-lexicographic order instead of normalizing it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -67,6 +67,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
+      "description": "Set-like identifiers normalized to lexicographic order by canonical contract validation.",
       "x-agentguard-order": "lexicographic",
       "items": {"type": "string", "pattern": "^AG-THR-[0-9]{3}$"}
     },
@@ -134,10 +135,12 @@
     },
     "forbidden_effects": {
       "allOf": [{"$ref": "#/$defs/eventList"}],
+      "description": "Set-like identifiers normalized to lexicographic order by canonical contract validation.",
       "x-agentguard-order": "lexicographic"
     },
     "evidence_required": {
       "allOf": [{"$ref": "#/$defs/eventList"}, {"minItems": 1}],
+      "description": "Canonical input that must already be unique and lexicographically sorted; canonical contract validation rejects noncanonical order rather than normalizing it.",
       "x-agentguard-order": "lexicographic"
     },
     "cleanup": {

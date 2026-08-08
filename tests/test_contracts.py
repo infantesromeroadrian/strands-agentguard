@@ -154,6 +154,21 @@ def test_scenario_fixtures_satisfy_strict_model(fixture_path: Path) -> None:
     assert scenario.cleanup.verify is True
 
 
+def test_scenario_manifest_entries_match_all_frozen_fixtures() -> None:
+    manifest = load_json(ROOT / "fixtures" / "scenarios" / "v0.1.0" / "manifest.json")
+    entries = cast(list[dict[str, Any]], manifest["scenarios"])
+
+    assert len(SCENARIO_FIXTURES) == 10
+    assert manifest["scenario_count"] == len(entries) == len(SCENARIO_FIXTURES)
+
+    for entry, fixture_path in zip(entries, SCENARIO_FIXTURES, strict=True):
+        scenario = load_json(fixture_path)
+
+        assert entry["scenario_id"] == scenario["scenario_id"]
+        assert entry["path"] == fixture_path.relative_to(ROOT).as_posix()
+        assert entry["sha256"] == hashlib.sha256(fixture_path.read_bytes()).hexdigest()
+
+
 def test_tool_fingerprint_has_known_vector_and_terminal_lf() -> None:
     payload = valid_tool_payload()
     descriptor = ToolDescriptor.model_validate(payload)
@@ -811,11 +826,11 @@ def test_tool_input_schema_rejects_unsafe_integer_keywords() -> None:
         validate_schema("tool-descriptor.schema.json", payload)
 
 
-def test_scenario_set_like_collections_normalize_to_canonical_persisted_order() -> None:
+def test_scenario_normalized_set_like_collections_preserve_existing_behavior() -> None:
     payload = load_json(SCENARIO_FIXTURES[0])
     payload["threat_ids"] = ["AG-THR-999", payload["threat_ids"][0]]
     payload["forbidden_effects"] = ["z_event", "a_event"]
-    payload["evidence_required"] = ["z_evidence", "a_evidence"]
+    payload["evidence_required"] = ["a_evidence", "z_evidence"]
 
     scenario = Scenario.model_validate(payload)
     validate_schema("scenario.schema.json", payload)
@@ -823,15 +838,36 @@ def test_scenario_set_like_collections_normalize_to_canonical_persisted_order() 
 
     assert scenario.threat_ids == tuple(sorted(payload["threat_ids"]))
     assert scenario.forbidden_effects == tuple(sorted(payload["forbidden_effects"]))
-    assert scenario.evidence_required == tuple(sorted(payload["evidence_required"]))
+    assert scenario.evidence_required == tuple(payload["evidence_required"])
     assert isinstance(validated, Scenario)
-    assert validated.model_dump(mode="json")["threat_ids"] == sorted(payload["threat_ids"])
+    persisted = validated.model_dump(mode="json")
+    assert persisted["threat_ids"] == sorted(payload["threat_ids"])
+    assert persisted["forbidden_effects"] == sorted(payload["forbidden_effects"])
+    assert persisted["evidence_required"] == payload["evidence_required"]
+
+
+def test_scenario_evidence_required_rejects_noncanonical_order() -> None:
+    payload = load_json(SCENARIO_FIXTURES[0])
+    payload["evidence_required"] = ["z_evidence", "a_evidence"]
+
+    with pytest.raises(ValidationError, match="evidence_required must be sorted lexicographically"):
+        Scenario.model_validate(payload)
+    # Standard Draft 2020-12 treats the ordering extension as an annotation.
+    validate_schema("scenario.schema.json", payload)
+    with pytest.raises(ValidationError, match="evidence_required must be sorted lexicographically"):
+        validate_contract("scenario.schema.json", payload)
+
+
+def test_scenario_evidence_required_rejects_duplicates() -> None:
+    payload = load_json(SCENARIO_FIXTURES[0])
 
     payload["evidence_required"] = ["duplicate", "duplicate"]
     with pytest.raises(ValidationError, match="duplicates"):
         Scenario.model_validate(payload)
     with pytest.raises(JsonSchemaValidationError):
         validate_schema("scenario.schema.json", payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_contract("scenario.schema.json", payload)
 
 
 def test_permission_and_finding_sets_reject_noncanonical_order() -> None:

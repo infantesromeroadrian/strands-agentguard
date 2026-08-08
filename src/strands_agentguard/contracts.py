@@ -706,7 +706,13 @@ class ScenarioEvaluator(ContractModel):
 
 
 class Scenario(ContractModel):
-    """Closed synthetic scenario with a predeclared expected trajectory."""
+    """Closed synthetic scenario with a predeclared expected trajectory.
+
+    ``threat_ids`` and ``forbidden_effects`` are normalized because they are
+    set-like inputs. ``evidence_required`` is persisted contract material and
+    must already be unique and lexicographically sorted; noncanonical input is
+    rejected instead of silently rewritten.
+    """
 
     schema_version: Literal["0.1.0"]
     scenario_id: ScenarioId
@@ -735,11 +741,17 @@ class Scenario(ContractModel):
     cleanup: ScenarioCleanup
     evaluator: ScenarioEvaluator
 
-    @field_validator("threat_ids", "forbidden_effects", "evidence_required")
+    @field_validator("threat_ids", "forbidden_effects")
     @classmethod
-    def validate_sorted_identifiers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+    def normalize_set_like_identifiers(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         _require_unique(value, "scenario identifier list")
         return tuple(sorted(value))
+
+    @field_validator("evidence_required")
+    @classmethod
+    def validate_evidence_required(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        _require_sorted_unique(value, "evidence_required")
+        return value
 
     @field_validator("preconditions")
     @classmethod
