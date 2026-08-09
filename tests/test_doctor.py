@@ -28,6 +28,8 @@ def test_doctor_validates_the_complete_offline_stack() -> None:
         "identities",
     ]
     assert all(check.ok for check in report.checks)
+    corpus_check = next(check for check in report.checks if check.name == "corpus")
+    assert corpus_check.detail == "10 frozen scenarios validated; AG-SCN-001..003 executed"
 
 
 def test_public_agentguard_doctor_command_returns_zero_when_healthy() -> None:
