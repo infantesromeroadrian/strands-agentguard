@@ -3,7 +3,7 @@
   "target_id": "synthetic-agentguard",
   "target_version": "0.1.0",
   "profile": "baseline",
-  "candidate_identity": "fixture:baseline:55ed3329198b5a4747303cf114a9c43cb40b6d75fc4837114cad4f3af615edba",
+  "candidate_identity": "fixture:baseline:fd6376efa0091922a4307d165cf64f2ceb8350adfd12105e75d0ed2b288b268b",
   "provenance": "authored_for_strands_agentguard",
   "confidence": "designed_not_executed",
   "synthetic": true,
@@ -133,7 +133,7 @@
       "simulate_sensitive_action"
     ],
     "approval": [],
-    "deny": ["cloud", "filesystem_arbitrary", "network", "shell"]
+    "deny": ["cloud", "filesystem_arbitrary", "network", "shell", "subprocess"]
   },
   "limits": {
     "assessment_timeout_seconds": 120,

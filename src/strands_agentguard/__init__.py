@@ -23,18 +23,34 @@ from .contracts import (
     canonical_json_bytes,
     canonical_sha256,
 )
+from .models import MODEL_ID, DeterministicModel, UnregisteredModelInput
+from .targets import (
+    DeterministicTarget,
+    FixtureIdentityError,
+    TargetExecution,
+    TargetInputRejected,
+    TargetValidationError,
+    UnsupportedScenarioError,
+    fixture_candidate_identity,
+    fixture_identity_digest,
+    validate_fixture_identity,
+)
 
 __version__ = "0.0.0"
 
 __all__ = [
+    "MODEL_ID",
     "SCHEMA_VERSION",
     "AssessmentResult",
     "AssessmentSummary",
     "AssessmentTimestamps",
+    "DeterministicModel",
+    "DeterministicTarget",
     "ExecutionLimits",
     "ExpectedOutcome",
     "ExpectedTrajectory",
     "Finding",
+    "FixtureIdentityError",
     "McpServerDescriptor",
     "OutcomeAssertion",
     "PermissionSet",
@@ -44,9 +60,17 @@ __all__ = [
     "ScenarioCleanup",
     "ScenarioEvaluator",
     "ScenarioResult",
+    "TargetExecution",
+    "TargetInputRejected",
     "TargetManifest",
+    "TargetValidationError",
     "ToolDescriptor",
+    "UnregisteredModelInput",
+    "UnsupportedScenarioError",
     "__version__",
     "canonical_json_bytes",
     "canonical_sha256",
+    "fixture_candidate_identity",
+    "fixture_identity_digest",
+    "validate_fixture_identity",
 ]
