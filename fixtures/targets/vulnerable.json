@@ -3,7 +3,7 @@
   "target_id": "synthetic-agentguard",
   "target_version": "0.1.0",
   "profile": "baseline",
-  "candidate_identity": "fixture:baseline:fd6376efa0091922a4307d165cf64f2ceb8350adfd12105e75d0ed2b288b268b",
+  "candidate_identity": "fixture:baseline:cadaa30ba30123e43940bb2ea932bdcf7861fdf0d008d25b8a5f3bc41ac12416",
   "provenance": "authored_for_strands_agentguard",
   "confidence": "designed_not_executed",
   "synthetic": true,
@@ -24,7 +24,8 @@
         "properties": {
           "scenario_id": {
             "type": "string",
-            "pattern": "^AG-SCN-[0-9]{3}$"
+            "enum": ["AG-SCN-003"],
+            "maxLength": 10
           }
         },
         "required": ["scenario_id"],
@@ -34,7 +35,30 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "READ",
       "approval_required": false,
-      "fingerprint": "b742eaadeab321b08386311af91590c3d35acc11f6f590a1201ab0aae709231c"
+      "fingerprint": "51b9712d88c6f9bc1f366af3f03f079c2f5c7f639ea800d8084e6a225dd82d7b"
+    },
+    {
+      "tool_id": "large_result",
+      "name": "large_result",
+      "description": "Return deterministic bounded text for local offload tests.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65536
+          }
+        },
+        "required": ["size_bytes"],
+        "additionalProperties": false
+      },
+      "origin": "custom",
+      "permission_class": "READ_ONLY_ALLOWED",
+      "effect_class": "READ",
+      "approval_required": false,
+      "fingerprint": "b83b2f80b3afa50b25dfde8a3951896fd38dab009e9b950ab5f70618fd888d2a"
     },
     {
       "tool_id": "read_evidence",
@@ -46,7 +70,9 @@
         "properties": {
           "evidence_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9._-]{0,63}$"
           }
         },
         "required": ["evidence_id"],
@@ -56,7 +82,7 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "READ",
       "approval_required": false,
-      "fingerprint": "755e4104adbb5d6863e93375c9667199cb9719a2590d9ffbd598633289a054df"
+      "fingerprint": "73535b614faca4db89db8e4cc2fab50e9f0665c6a00b520bfe400390d5d649b6"
     },
     {
       "tool_id": "read_inventory",
@@ -68,7 +94,9 @@
         "properties": {
           "inventory_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9._-]{0,63}$"
           }
         },
         "required": ["inventory_id"],
@@ -78,7 +106,7 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "READ",
       "approval_required": false,
-      "fingerprint": "46df4b09cea709460d012c22cc3c29eebc314fcf9b89423634464168c82d783b"
+      "fingerprint": "d53374e3434938aecdff01bc2bacf2aa978126f34311f22e312d27f80b0b5618"
     },
     {
       "tool_id": "simulate_sensitive_action",
@@ -90,14 +118,19 @@
         "properties": {
           "operation_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9._-]{0,63}$"
           },
           "record_id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9._-]{0,63}$"
           },
           "value": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64
           }
         },
@@ -108,7 +141,7 @@
       "permission_class": "READ_ONLY_ALLOWED",
       "effect_class": "SIMULATED_WRITE",
       "approval_required": false,
-      "fingerprint": "d0374b17335180113788fd21a2e50a819e6a36164c8667baaffbec7b482534b4"
+      "fingerprint": "6cbdd26c0db0a9b8bc162bc6966d05a9693a03139c621de39cda0d3dd5c243db"
     }
   ],
   "mcp_servers": [
@@ -128,6 +161,7 @@
   "permissions": {
     "allow": [
       "adversarial_result",
+      "large_result",
       "read_evidence",
       "read_inventory",
       "simulate_sensitive_action"
@@ -156,5 +190,10 @@
     "sessions",
     "steering"
   ],
-  "contract_files": ["fixtures/targets/vulnerable.json"]
+  "contract_files": [
+    "fixtures/mcp/v0.1.0/poisoned-description.json",
+    "fixtures/mcp/v0.1.0/schema-drift.json",
+    "fixtures/targets/vulnerable.json",
+    "schemas/tool-inventory.schema.json"
+  ]
 }

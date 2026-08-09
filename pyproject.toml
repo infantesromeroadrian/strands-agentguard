@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 agentguard = "strands_agentguard.cli:app"
+agentguard-synthetic-mcp = "strands_agentguard.synthetic_mcp:run_stdio"
 
 [project.optional-dependencies]
 api = [

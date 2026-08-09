@@ -25,6 +25,12 @@ from strands_agentguard.contracts import (
     TargetManifest,
     validate_contract_document,
 )
+from strands_agentguard.inventory import (
+    DiscoveredTool,
+    deterministic_inventory_json,
+    normalize_mcp_inventory,
+)
+from strands_agentguard.local_tools import mcp_tool_definitions
 from strands_agentguard.models import DeterministicModel, UnregisteredModelInput
 from strands_agentguard.targets import (
     DeterministicTarget,
@@ -42,6 +48,7 @@ _SCHEMA_NAMES = frozenset(
         "scenario.schema.json",
         "target-manifest.schema.json",
         "tool-descriptor.schema.json",
+        "tool-inventory.schema.json",
     }
 )
 _CONTRACT_SCHEMA_NAMES = frozenset(
@@ -174,6 +181,8 @@ def _check_configuration(context: _DoctorContext) -> str:
         project_table.get("requires-python") != ">=3.12,<3.13"
         or uv_table.get("required-version") != ">=0.12.2,<0.13"
         or project_table.get("scripts", {}).get("agentguard") != "strands_agentguard.cli:app"
+        or project_table.get("scripts", {}).get("agentguard-synthetic-mcp")
+        != "strands_agentguard.synthetic_mcp:run_stdio"
     ):
         raise DoctorValidationError("supported Python, uv, or CLI configuration changed")
     dependencies = project_table.get("dependencies")
@@ -218,7 +227,7 @@ def _check_schemas(context: _DoctorContext) -> str:
     schemas, _ = _load_schemas(context)
     if not _CONTRACT_SCHEMA_NAMES.issubset(schemas):
         raise DoctorValidationError("six canonical contract schemas are not available")
-    return "7 Draft 2020-12 schemas, including 6 semantic contracts"
+    return "8 Draft 2020-12 schemas, including 6 semantic contracts and tool inventory"
 
 
 def _check_targets(context: _DoctorContext) -> str:
@@ -244,6 +253,44 @@ def _check_targets(context: _DoctorContext) -> str:
         raise DoctorValidationError("target profiles are incomplete")
     context.target = DeterministicTarget.from_repository(context.root)
     return "one shared in-memory target, two policy profiles, one declared tool surface"
+
+
+def _check_inventory(context: _DoctorContext) -> str:
+    schemas, registry = _load_schemas(context)
+    target = context.target or DeterministicTarget.from_repository(context.root)
+    discovered = tuple(
+        DiscoveredTool(
+            name=definition.name,
+            description=definition.description,
+            input_schema=definition.input_schema,
+        )
+        for definition in mcp_tool_definitions()
+    )
+    try:
+        inventory = normalize_mcp_inventory(
+            target.manifests["baseline"],
+            "synthetic-audit",
+            discovered,
+        )
+        if inventory.rejected or [tool.name for tool in inventory.accepted] != [
+            "adversarial_result",
+            "read_evidence",
+            "read_inventory",
+            "simulate_sensitive_action",
+        ]:
+            raise DoctorValidationError("normalized MCP surface is incomplete or rejected")
+        first = deterministic_inventory_json(inventory)
+        second = deterministic_inventory_json(inventory)
+        if first != second:
+            raise DoctorValidationError("tool inventory serialization is not repeatable")
+        Draft202012Validator(
+            schemas["tool-inventory.schema.json"],
+            registry=registry,
+        ).validate(json.loads(first))
+    except ValueError as exc:
+        raise DoctorValidationError("tool inventory violates normalization or JSON Schema") from exc
+    context.target = target
+    return "4 MCP tools accepted, local-only large result excluded, JSON repeatable"
 
 
 def _check_corpus(context: _DoctorContext) -> str:
@@ -367,6 +414,7 @@ def run_doctor(root: Path | None = None) -> DoctorReport:
         ("configuration", _check_configuration),
         ("schemas", _check_schemas),
         ("targets", _check_targets),
+        ("inventory", _check_inventory),
         ("corpus", _check_corpus),
         ("model", _check_model),
         ("identities", _check_identities),

@@ -179,7 +179,7 @@ def test_tool_fingerprint_has_known_vector_and_terminal_lf() -> None:
     }
 
     assert descriptor.fingerprint == (
-        "b742eaadeab321b08386311af91590c3d35acc11f6f590a1201ab0aae709231c"
+        "51b9712d88c6f9bc1f366af3f03f079c2f5c7f639ea800d8084e6a225dd82d7b"
     )
     assert descriptor.fingerprint == canonical_sha256_bytes_with_lf(material)
     assert descriptor.fingerprint != canonical_sha256(material)

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tool-inventory.schema.json",
+  "title": "Strands AgentGuard ToolInventory",
+  "description": "Closed deterministic inventory produced after fail-closed MCP discovery normalization.",
+  "$comment": "Raw untrusted descriptions and schemas are deliberately absent. The Python contract additionally enforces stable ordering and verifies inventory_fingerprint over every field except itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "target_id",
+    "target_candidate",
+    "server_id",
+    "server_fingerprint",
+    "accepted",
+    "rejected",
+    "inventory_fingerprint"
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "lowerIdentifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+    },
+    "toolName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+    },
+    "acceptedTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool_id",
+        "name",
+        "origin",
+        "permission_class",
+        "effect_class",
+        "approval_required",
+        "fingerprint",
+        "description_sha256",
+        "input_schema_sha256"
+      ],
+      "properties": {
+        "tool_id": {"$ref": "#/$defs/lowerIdentifier"},
+        "name": {"$ref": "#/$defs/toolName"},
+        "origin": {"const": "mcp"},
+        "permission_class": {
+          "type": "string",
+          "enum": ["READ_ONLY_ALLOWED", "SIMULATED_SENSITIVE_APPROVAL"]
+        },
+        "effect_class": {
+          "type": "string",
+          "enum": ["READ", "SIMULATED_WRITE"]
+        },
+        "approval_required": {"type": "boolean"},
+        "fingerprint": {"$ref": "#/$defs/sha256"},
+        "description_sha256": {"$ref": "#/$defs/sha256"},
+        "input_schema_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "rejectedTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observed_name",
+        "name_sha256",
+        "reason",
+        "observed_fingerprint"
+      ],
+      "properties": {
+        "observed_name": {"$ref": "#/$defs/toolName"},
+        "name_sha256": {"$ref": "#/$defs/sha256"},
+        "reason": {
+          "type": "string",
+          "enum": [
+            "DENIED",
+            "DUPLICATE_TOOL",
+            "FINGERPRINT_DRIFT",
+            "INVALID_DESCRIPTOR",
+            "MISSING_TOOL",
+            "UNKNOWN_TOOL"
+          ]
+        },
+        "observed_fingerprint": {
+          "oneOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "target_id": {"$ref": "#/$defs/lowerIdentifier"},
+    "target_candidate": {
+      "type": "string",
+      "pattern": "^fixture:baseline:[0-9a-f]{64}$"
+    },
+    "server_id": {"$ref": "#/$defs/lowerIdentifier"},
+    "server_fingerprint": {"$ref": "#/$defs/sha256"},
+    "accepted": {
+      "type": "array",
+      "uniqueItems": true,
+      "x-agentguard-order": "name",
+      "items": {"$ref": "#/$defs/acceptedTool"}
+    },
+    "rejected": {
+      "type": "array",
+      "uniqueItems": true,
+      "x-agentguard-order": "observed_name,reason,name_sha256",
+      "items": {"$ref": "#/$defs/rejectedTool"}
+    },
+    "inventory_fingerprint": {"$ref": "#/$defs/sha256"}
+  }
+}
