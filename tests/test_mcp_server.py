@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO, cast
 
 import anyio
 import pytest
@@ -12,6 +15,8 @@ from mcp.client.stdio import stdio_client
 
 from strands_agentguard.inventory import (
     MCP_LIFECYCLE_TIMEOUT_SECONDS,
+    InventoryDiscoveryError,
+    discover_registered_inventory,
     registered_server_parameters,
 )
 
@@ -26,7 +31,7 @@ EXPECTED_MCP_TOOLS = [
 
 async def exercise_server() -> tuple[list[str], dict[str, Any], bool, bool, bool, bool]:
     parameters = registered_server_parameters(ROOT)
-    errlog = sys.__stderr__ if sys.__stderr__ is not None else sys.stderr
+    errlog = cast(TextIO, subprocess.DEVNULL)
     with anyio.fail_after(MCP_LIFECYCLE_TIMEOUT_SECONDS):
         async with stdio_client(parameters, errlog=errlog) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
@@ -95,10 +100,11 @@ def test_registered_server_environment_contains_no_credential_or_network_configu
 
     assert parameters.command == sys.executable
     assert parameters.args == ["-m", "strands_agentguard.synthetic_mcp"]
-    assert parameters.cwd == ROOT
+    assert parameters.cwd == ROOT / "src"
     assert parameters.env is not None
     assert set(parameters.env) == {"AGENTGUARD_EGRESS", "PYTHONNOUSERSITE", "PYTHONPATH"}
     assert parameters.env["AGENTGUARD_EGRESS"] == "deny"
+    assert parameters.env["PYTHONPATH"].split(os.pathsep)[0] == str(ROOT / "src")
     assert not any(
         token in key.upper()
         for key in parameters.env
@@ -123,3 +129,33 @@ def test_stdio_client_cleanup_terminates_the_registered_server(
 
     assert len(processes) == 1
     assert processes[0].returncode is not None
+
+
+def test_caller_controlled_root_cannot_execute_sitecustomize_or_server_module(
+    tmp_path: Path,
+) -> None:
+    candidate = tmp_path / "candidate"
+    target_directory = candidate / "fixtures" / "targets"
+    package_directory = candidate / "src" / "strands_agentguard"
+    target_directory.mkdir(parents=True)
+    package_directory.mkdir(parents=True)
+    shutil.copy2(ROOT / "fixtures" / "targets" / "vulnerable.json", target_directory)
+    site_marker = tmp_path / "sitecustomize-executed"
+    module_marker = tmp_path / "synthetic-module-executed"
+    (candidate / "src" / "sitecustomize.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(site_marker)!r}).write_text('executed', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    (package_directory / "__init__.py").write_text("", encoding="utf-8")
+    (package_directory / "synthetic_mcp.py").write_text(
+        "from pathlib import Path\n"
+        f"Path({str(module_marker)!r}).write_text('executed', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(InventoryDiscoveryError, match="root is not trusted"):
+        asyncio.run(discover_registered_inventory(candidate))
+
+    assert not site_marker.exists()
+    assert not module_marker.exists()

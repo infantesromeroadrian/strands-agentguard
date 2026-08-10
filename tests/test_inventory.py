@@ -8,15 +8,20 @@ from typing import Any, cast
 import mcp.types as mcp_types
 import pytest
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped, unused-ignore]
+from mcp import ClientSession
 from pydantic import ValidationError
 
 from strands_agentguard import TargetManifest, fixture_candidate_identity
 from strands_agentguard.inventory import (
+    MAX_MCP_DISCOVERED_TOOLS,
+    MAX_MCP_DISCOVERY_PAGES,
     AcceptedToolSurface,
     DiscoveredTool,
+    InventoryDiscoveryError,
     ToolExposureRejected,
     ToolInventory,
     deterministic_inventory_json,
+    discover_session_surface,
     load_discovery_fixture,
     normalize_mcp_inventory,
     safe_inventory_summary,
@@ -25,6 +30,54 @@ from strands_agentguard.local_tools import mcp_tool_definitions
 
 ROOT = Path(__file__).parents[1]
 MCP_FIXTURES = ROOT / "fixtures" / "mcp" / "v0.1.0"
+
+
+class PaginatedSession:
+    def __init__(self, pages: list[mcp_types.ListToolsResult]) -> None:
+        self._pages = pages
+        self.requested_cursors: list[str | None] = []
+
+    async def list_tools(
+        self,
+        cursor: str | None = None,
+        *,
+        params: mcp_types.PaginatedRequestParams | None = None,
+    ) -> mcp_types.ListToolsResult:
+        requested = params.cursor if params is not None else cursor
+        self.requested_cursors.append(requested)
+        return self._pages[len(self.requested_cursors) - 1]
+
+    async def call_tool(
+        self,
+        _name: str,
+        _arguments: dict[str, Any],
+    ) -> mcp_types.CallToolResult:
+        raise AssertionError("pagination tests must not invoke tools")
+
+
+def trusted_mcp_registrations() -> list[mcp_types.Tool]:
+    return [
+        mcp_types.Tool(
+            name=definition.name,
+            description=definition.description,
+            inputSchema=cast(dict[str, Any], definition.input_schema_dict()),
+        )
+        for definition in mcp_tool_definitions()
+    ]
+
+
+def unknown_mcp_registration(name: str = "unknown_tool") -> mcp_types.Tool:
+    return mcp_types.Tool(
+        name=name,
+        description="Untrusted tool from a later page",
+        inputSchema={
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+    )
 
 
 def load_baseline() -> TargetManifest:
@@ -73,6 +126,72 @@ def test_exact_baseline_surface_is_the_only_accepted_inventory() -> None:
         "READ",
         "SIMULATED_WRITE",
     }
+
+
+def test_discovery_reads_every_page_and_rejects_unknown_tool_on_later_page() -> None:
+    registrations = trusted_mcp_registrations()
+    session = PaginatedSession(
+        [
+            mcp_types.ListToolsResult(tools=registrations[:2], nextCursor="page-2"),
+            mcp_types.ListToolsResult(
+                tools=[*registrations[2:], unknown_mcp_registration()],
+                nextCursor=None,
+            ),
+        ]
+    )
+
+    surface = asyncio.run(discover_session_surface(cast(ClientSession, session), load_baseline()))
+
+    assert session.requested_cursors == [None, "page-2"]
+    assert [tool.name for tool in surface.tools] == [
+        "adversarial_result",
+        "read_evidence",
+        "read_inventory",
+        "simulate_sensitive_action",
+    ]
+    assert [(tool.observed_name, tool.reason) for tool in surface.inventory.rejected] == [
+        ("unknown_tool", "UNKNOWN_TOOL")
+    ]
+
+
+def test_discovery_rejects_repeated_or_cyclic_cursor() -> None:
+    session = PaginatedSession(
+        [
+            mcp_types.ListToolsResult(tools=[], nextCursor="repeat"),
+            mcp_types.ListToolsResult(tools=[], nextCursor="repeat"),
+        ]
+    )
+
+    with pytest.raises(InventoryDiscoveryError, match="cursor repeated or cycled"):
+        asyncio.run(discover_session_surface(cast(ClientSession, session), load_baseline()))
+
+    assert session.requested_cursors == [None, "repeat"]
+
+
+def test_discovery_page_limit_fails_closed() -> None:
+    pages = [
+        mcp_types.ListToolsResult(tools=[], nextCursor=f"cursor-{index + 1}")
+        for index in range(MAX_MCP_DISCOVERY_PAGES)
+    ]
+    session = PaginatedSession(pages)
+
+    with pytest.raises(InventoryDiscoveryError, match="page limit"):
+        asyncio.run(discover_session_surface(cast(ClientSession, session), load_baseline()))
+
+    assert len(session.requested_cursors) == MAX_MCP_DISCOVERY_PAGES
+
+
+def test_discovery_tool_limit_fails_closed() -> None:
+    tools = [
+        unknown_mcp_registration(f"unknown_{index:03d}")
+        for index in range(MAX_MCP_DISCOVERED_TOOLS + 1)
+    ]
+    session = PaginatedSession([mcp_types.ListToolsResult(tools=tools, nextCursor=None)])
+
+    with pytest.raises(InventoryDiscoveryError, match="tool limit"):
+        asyncio.run(discover_session_surface(cast(ClientSession, session), load_baseline()))
+
+    assert session.requested_cursors == [None]
 
 
 def test_poisoned_description_and_unknown_tool_are_rejected_without_echoing_content() -> None:

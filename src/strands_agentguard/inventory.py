@@ -7,11 +7,12 @@ import hmac
 import json
 import os
 import re
+import subprocess
 import sys
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, TextIO, cast
 
 import anyio
 import mcp
@@ -40,6 +41,8 @@ from strands_agentguard.targets.identity import validate_fixture_identity
 
 INVENTORY_SCHEMA_VERSION = "0.1.0"
 MCP_LIFECYCLE_TIMEOUT_SECONDS = 5
+MAX_MCP_DISCOVERY_PAGES = 8
+MAX_MCP_DISCOVERED_TOOLS = 64
 MAX_DISCOVERED_DESCRIPTION_BYTES = 4_096
 MAX_DISCOVERED_SCHEMA_BYTES = 16_384
 _SAFE_TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -380,10 +383,34 @@ async def discover_session_surface(
     manifest: TargetManifest,
     server_id: str = SERVER_ID,
 ) -> AcceptedToolSurface:
-    """Discover once and bind invocation to the resulting accepted set."""
+    """Discover every bounded MCP page and bind only the resulting accepted set."""
 
-    listed = await session.list_tools()
-    discovered = tuple(DiscoveredTool.from_mcp(tool) for tool in listed.tools)
+    discovered: list[DiscoveredTool] = []
+    cursor: str | None = None
+    seen_cursors: set[str] = set()
+    for page_number in range(MAX_MCP_DISCOVERY_PAGES):
+        if page_number == 0:
+            listed = await session.list_tools()
+        else:
+            if cursor is None:  # pragma: no cover - loop exits on terminal page
+                break
+            listed = await session.list_tools(
+                params=mcp_types.PaginatedRequestParams(cursor=cursor)
+            )
+        if len(discovered) + len(listed.tools) > MAX_MCP_DISCOVERED_TOOLS:
+            raise InventoryDiscoveryError("MCP tool discovery exceeds its tool limit")
+        discovered.extend(DiscoveredTool.from_mcp(tool) for tool in listed.tools)
+
+        next_cursor = listed.nextCursor
+        if next_cursor is None:
+            break
+        if not next_cursor or next_cursor in seen_cursors:
+            raise InventoryDiscoveryError("MCP tool discovery cursor repeated or cycled")
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    else:
+        raise InventoryDiscoveryError("MCP tool discovery exceeds its page limit")
+
     inventory = normalize_mcp_inventory(manifest, server_id, discovered)
 
     async def invoke(name: str, arguments: dict[str, Any]) -> mcp_types.CallToolResult:
@@ -402,39 +429,57 @@ def _load_baseline_manifest(root: Path) -> TargetManifest:
     return manifest
 
 
-def _safe_server_environment(root: Path) -> dict[str, str]:
+def _trusted_repository_root(root: Path) -> Path:
+    try:
+        expected = repository_root().resolve(strict=True)
+        supplied = root.resolve(strict=True)
+    except OSError as exc:
+        raise InventoryDiscoveryError("inventory repository root is unavailable") from exc
+    if supplied != expected:
+        raise InventoryDiscoveryError("inventory repository root is not trusted")
+    return expected
+
+
+def _trusted_source_root() -> Path:
+    return Path(__file__).resolve(strict=True).parents[1]
+
+
+def _safe_server_environment() -> dict[str, str]:
     mcp_path = Path(mcp.__file__).resolve()
     dependency_root = mcp_path.parents[1]
     return {
         "AGENTGUARD_EGRESS": "deny",
         "PYTHONNOUSERSITE": "1",
-        "PYTHONPATH": os.pathsep.join((str(root / "src"), str(dependency_root))),
+        "PYTHONPATH": os.pathsep.join((str(_trusted_source_root()), str(dependency_root))),
     }
 
 
 def registered_server_parameters(root: Path) -> StdioServerParameters:
     """Build parameters for the one fixed synthetic server, never an arbitrary command."""
 
-    resolved_root = root.resolve()
+    _trusted_repository_root(root)
+    source_root = _trusted_source_root()
     return StdioServerParameters(
         command=sys.executable,
         args=["-m", "strands_agentguard.synthetic_mcp"],
-        env=_safe_server_environment(resolved_root),
-        cwd=resolved_root,
+        env=_safe_server_environment(),
+        cwd=source_root,
     )
 
 
 async def discover_registered_inventory(root: Path) -> ToolInventory:
     """Run only the registered synthetic stdio server and return its closed inventory."""
 
-    resolved_root = root.resolve()
-    manifest = _load_baseline_manifest(resolved_root)
+    trusted_root = _trusted_repository_root(root)
+    manifest = _load_baseline_manifest(trusted_root)
     server = _manifest_server(manifest, SERVER_ID)
     if server.executable_id != EXECUTABLE_ID or server.transport != "stdio":
         raise InventoryDiscoveryError("registered MCP execution contract changed")
 
-    parameters = registered_server_parameters(resolved_root)
-    errlog = sys.__stderr__ if sys.__stderr__ is not None else sys.stderr
+    parameters = registered_server_parameters(trusted_root)
+    # The child has no debug mode. Its stderr is suppressed at the process
+    # boundary (a zero-byte bound); callers receive only the stable error below.
+    errlog = cast(TextIO, subprocess.DEVNULL)
     try:
         with anyio.fail_after(MCP_LIFECYCLE_TIMEOUT_SECONDS):
             async with stdio_client(parameters, errlog=errlog) as (
@@ -445,10 +490,10 @@ async def discover_registered_inventory(root: Path) -> ToolInventory:
                     await session.initialize()
                     surface = await discover_session_surface(session, manifest)
                     return surface.inventory
-    except Exception as exc:
+    except Exception:
         raise InventoryDiscoveryError(
             "registered synthetic MCP discovery or cleanup failed"
-        ) from exc
+        ) from None
 
 
 def repository_root() -> Path:
@@ -510,6 +555,8 @@ def load_discovery_fixture(path: Path) -> tuple[DiscoveredTool, ...]:
 
 __all__ = [
     "INVENTORY_SCHEMA_VERSION",
+    "MAX_MCP_DISCOVERED_TOOLS",
+    "MAX_MCP_DISCOVERY_PAGES",
     "MCP_LIFECYCLE_TIMEOUT_SECONDS",
     "AcceptedTool",
     "AcceptedToolSurface",
