@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "assessment-result.schema.json",
   "title": "Strands AgentGuard AssessmentResult",
-  "description": "Closed v0.1.0 source result with explicit incomplete state and addressable evidence. Every normalized relative POSIX evidence reference requires a matching artifact_hashes entry; remote non-file URIs intentionally require no local artifact hash.",
-  "$comment": "Standard Draft 2020-12 cannot express local evidence-to-artifact hash membership, cross-contract references, digest coherence, or lexicographic array ordering. The canonical contracts.validate_contract_document surface checks those invariants and temporal order. Windows drive paths are classified as local and rejected because persisted local paths use normalized relative POSIX form. JSON object duplicate keys are rejected by the raw contract parser before schema/model validation.",
+  "description": "Closed v0.1.0 source result with explicit incomplete state and addressable evidence. Every normalized relative POSIX evidence reference requires a matching artifact_hashes entry; canonical remote HTTPS references intentionally require no local artifact hash.",
+  "$comment": "Standard Draft 2020-12 cannot express local evidence-to-artifact hash membership, cross-contract references, digest coherence, or lexicographic array ordering. The canonical contracts.validate_contract_document surface checks those invariants and temporal order. Remote evidence is limited to canonical https:// references with a non-empty hostname, the default port, no userinfo, no query string, no percent encoding, no backslash, and no traversal. Windows drive paths are classified as local and rejected because persisted local paths use normalized relative POSIX form. JSON object duplicate keys are rejected by the raw contract parser before schema/model validation.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,11 +33,11 @@
     },
     "nonEmptyText": {"type": "string", "minLength": 1, "maxLength": 1024},
     "evidenceRef": {
-      "description": "Normalized relative POSIX local reference (optionally with a fragment) or remote non-file URI. Windows drive paths are local and rejected.",
+      "description": "Normalized relative POSIX local reference (optionally with a fragment) or canonical default-port https:// hostname reference without userinfo, query, percent encoding, backslash, or traversal.",
       "type": "string",
       "minLength": 1,
       "maxLength": 512,
-      "pattern": "^(?![Ff][Ii][Ll][Ee]:)(?![A-Za-z]:[/\\\\])(?!.*(?:^|[/#])\\.\\.(?:$|[/#]))(?:[A-Za-z][A-Za-z0-9+.-]*:[^\\s\\u0000-\\u001f\\u007f\\\\]*|[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?:#[^\\s\\u0000-\\u001f\\u007f\\\\]*)?)$"
+      "pattern": "^(?![A-Za-z]:[/\\\\])(?!.*(?:^|[/#])\\.\\.(?:$|[/#]))(?:https://[^\\[\\]:/?#@%\\s\\u0000-\\u001f\\u007f\\\\]+(?:/[^?#%\\s\\u0000-\\u001f\\u007f\\\\]*)?(?:#[^%\\s\\u0000-\\u001f\\u007f\\\\]*)?|[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?:#[^\\s\\u0000-\\u001f\\u007f\\\\]*)?)$"
     },
     "safeRelativePath": {
       "type": "string",

@@ -3,7 +3,7 @@
   "$id": "finding.schema.json",
   "title": "Strands AgentGuard Finding",
   "description": "Closed v0.1.0 evidence-backed finding. Status remains OPEN; disposition is explicit and never inferred from severity.",
-  "$comment": "Evidence references are either normalized relative POSIX paths or non-file remote URIs. Windows drive paths are local and invalid in this normalized contract. Within AssessmentResult, every local reference requires a matching artifact_hashes key; remote URIs intentionally do not. Standard Draft 2020-12 cannot express that cross-document membership, so use contracts.validate_contract_document for full validation.",
+  "$comment": "Evidence references are either normalized relative POSIX paths or canonical https:// references with a non-empty hostname, the default port, no userinfo, no query string, no percent encoding, no backslash, and no traversal. Windows drive paths are local and invalid in this normalized contract. Within AssessmentResult, every local reference requires a matching artifact_hashes key; remote HTTPS references intentionally do not. Standard Draft 2020-12 cannot express that cross-document membership, so use contracts.validate_contract_document for full validation.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -30,11 +30,11 @@
     },
     "nonEmptyText": {"type": "string", "minLength": 1, "maxLength": 1024},
     "evidenceRef": {
-      "description": "Normalized relative POSIX local reference (optionally with a fragment) or remote non-file URI. Windows drive paths are local and rejected.",
+      "description": "Normalized relative POSIX local reference (optionally with a fragment) or canonical default-port https:// hostname reference without userinfo, query, percent encoding, backslash, or traversal.",
       "type": "string",
       "minLength": 1,
       "maxLength": 512,
-      "pattern": "^(?![Ff][Ii][Ll][Ee]:)(?![A-Za-z]:[/\\\\])(?!.*(?:^|[/#])\\.\\.(?:$|[/#]))(?:[A-Za-z][A-Za-z0-9+.-]*:[^\\s\\u0000-\\u001f\\u007f\\\\]*|[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?:#[^\\s\\u0000-\\u001f\\u007f\\\\]*)?)$"
+      "pattern": "^(?![A-Za-z]:[/\\\\])(?!.*(?:^|[/#])\\.\\.(?:$|[/#]))(?:https://[^\\[\\]:/?#@%\\s\\u0000-\\u001f\\u007f\\\\]+(?:/[^?#%\\s\\u0000-\\u001f\\u007f\\\\]*)?(?:#[^%\\s\\u0000-\\u001f\\u007f\\\\]*)?|[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?:#[^\\s\\u0000-\\u001f\\u007f\\\\]*)?)$"
     }
   },
   "properties": {

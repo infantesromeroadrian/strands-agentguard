@@ -215,20 +215,38 @@ type SafeRelativePath = Annotated[
 
 
 def _validate_evidence_reference(value: str) -> str:
-    normalized = value.replace("#", "/")
     if _is_windows_drive_reference(value):
         raise ValueError(
             "Windows drive paths are local evidence and must use normalized relative POSIX paths"
         )
+
+    normalized = value.replace("#", "/")
     parsed = urlsplit(value)
     if (
         value.startswith(("/", "\\"))
-        or parsed.scheme.lower() == "file"
         or "\\" in value
         or any(part == ".." for part in normalized.split("/"))
     ):
-        raise ValueError("must be an addressable non-file reference without traversal")
-    if not parsed.scheme:
+        raise ValueError(
+            "must be a normalized local reference or canonical https:// non-file reference"
+        )
+
+    if parsed.scheme:
+        reference_without_fragment = value.partition("#")[0]
+        if (
+            not value.startswith("https://")
+            or parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or any(character in parsed.netloc for character in "[]:")
+            or "?" in reference_without_fragment
+            or "%" in value
+        ):
+            raise ValueError(
+                "must be a normalized local reference or canonical https:// non-file reference"
+            )
+    else:
         local_path = value.partition("#")[0]
         _validate_safe_relative_path(local_path)
     return value

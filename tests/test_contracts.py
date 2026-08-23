@@ -738,6 +738,81 @@ def test_external_evidence_does_not_require_local_artifact_hash() -> None:
     assert isinstance(validated, AssessmentResult)
 
 
+@pytest.mark.parametrize(
+    ("reference", "artifact_hashes"),
+    [
+        ("artifacts/evidence.json#/events/0", {"artifacts/evidence.json": "2" * 64}),
+        ("evidence/run-001.json", {"evidence/run-001.json": "2" * 64}),
+        ("https://evidence.invalid/runs/run-001/events/0", {}),
+        ("https://evidence.invalid/runs/run-001#events/0", {}),
+    ],
+)
+def test_evidence_reference_acceptance_has_model_and_schema_parity(
+    reference: str,
+    artifact_hashes: dict[str, str],
+) -> None:
+    finding_payload = valid_finding_payload()
+    finding_payload["evidence_refs"] = [reference]
+
+    assessment_payload = json.loads(valid_assessment().model_dump_json())
+    assessment_payload["scenario_results"][0]["evidence_refs"] = [reference]
+    assessment_payload["findings"][0]["evidence_refs"] = [reference]
+    assessment_payload["artifact_hashes"] = artifact_hashes
+
+    Finding.model_validate(finding_payload)
+    validate_schema("finding.schema.json", finding_payload)
+    AssessmentResult.model_validate_json(json.dumps(assessment_payload))
+    validate_schema("assessment-result.schema.json", assessment_payload)
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "javascript:alert(1)",
+        "data:text/plain,evidence",
+        "http://evidence.invalid/runs/run-001",
+        "HTTPS://evidence.invalid/runs/run-001",
+        "https://",
+        "https:///runs/run-001",
+        "https://:443/runs/run-001",
+        "https://user@evidence.invalid/runs/run-001",
+        "https://user:password@evidence.invalid/runs/run-001",
+        "https://evidence.invalid/runs/run-001?token=secret",
+        "https://evidence.invalid/runs/run-001?X-Amz-Signature=secret",
+        "https://evidence.invalid/runs/../private",
+        "https://evidence.invalid\\@attacker.invalid/runs/run-001",
+        "https://evidence.invalid/%2e%2e/private",
+        "https://evidence.invalid/.%2E/private",
+        "https://evidence.invalid/%2e./private",
+        "https://evidence.invalid/safe%2fprivate",
+        "https://evidence.invalid/safe%2Fprivate",
+        "https://evidence.invalid/safe%5cprivate",
+        "https://evidence.invalid/safe%5Cprivate",
+        "https://[not-ipv6]/runs/run-001",
+        "https://[2001:db8::1]/runs/run-001",
+        "https://evidence.invalid:443/runs/run-001",
+        "https://evidence.invalid:8443/runs/run-001",
+    ],
+)
+def test_evidence_reference_rejection_has_model_and_schema_parity(reference: str) -> None:
+    finding_payload = valid_finding_payload()
+    finding_payload["evidence_refs"] = [reference]
+
+    assessment_payload = json.loads(valid_assessment().model_dump_json())
+    assessment_payload["scenario_results"][0]["evidence_refs"] = [reference]
+    assessment_payload["findings"][0]["evidence_refs"] = [reference]
+    assessment_payload["artifact_hashes"] = {}
+
+    with pytest.raises(ValidationError):
+        Finding.model_validate(finding_payload)
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("finding.schema.json", finding_payload)
+    with pytest.raises(ValidationError):
+        AssessmentResult.model_validate_json(json.dumps(assessment_payload))
+    with pytest.raises(JsonSchemaValidationError):
+        validate_schema("assessment-result.schema.json", assessment_payload)
+
+
 @pytest.mark.parametrize("reference", ["file:///etc/passwd", "FILE:///etc/passwd", "FiLe:x"])
 def test_file_uri_is_rejected_case_insensitively(reference: str) -> None:
     payload = valid_finding_payload()
