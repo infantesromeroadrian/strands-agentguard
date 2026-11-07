@@ -1,6 +1,6 @@
 [project]
 name = "strands-agentguard"
-version = "0.0.0"
+version = "0.1.0"
 description = "Reproducible security assessment harness for Strands agents, tools, and MCP servers."
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
