@@ -61,6 +61,27 @@ class UnsupportedScenarioError(LookupError):
 
 
 @dataclass(frozen=True, slots=True)
+class CorpusSpec:
+    """Location and exact membership of one frozen scenario corpus."""
+
+    corpus_id: str
+    relative_root: Path
+    scenario_ids: tuple[str, ...]
+
+
+FROZEN_CORPUS = CorpusSpec(
+    corpus_id="AG-THREAT-CORPUS",
+    relative_root=_CORPUS_RELATIVE_ROOT,
+    scenario_ids=_EXPECTED_CORPUS_SCENARIO_IDS,
+)
+MVP_CORPUS = CorpusSpec(
+    corpus_id="AG-MVP-CORPUS",
+    relative_root=Path("fixtures/scenarios/mvp-v0.1.0"),
+    scenario_ids=tuple(f"AG-SCN-{index:03d}" for index in range(11, 19)),
+)
+
+
+@dataclass(frozen=True, slots=True)
 class DeclaredTool:
     """Policy-neutral tool registration surface shared by both profiles."""
 
@@ -156,13 +177,13 @@ def _file_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, i
 
 
 @contextmanager
-def _opened_corpus_directory(root: Path) -> Iterator[int]:
+def _opened_corpus_directory(root: Path, relative_root: Path) -> Iterator[int]:
     """Anchor every corpus path component to a non-symlink directory descriptor."""
 
     descriptors = [_open_directory(root)]
     directory_links: list[tuple[int, str, os.stat_result]] = []
     try:
-        for component in _CORPUS_RELATIVE_ROOT.parts:
+        for component in relative_root.parts:
             parent_descriptor = descriptors[-1]
             child_descriptor = _open_directory(component, dir_fd=parent_descriptor)
             descriptors.append(child_descriptor)
@@ -250,10 +271,11 @@ def _verify_opened_corpus_files(
             raise TargetValidationError("corpus material changed while loading")
 
 
-def load_scenario_corpus(root: Path) -> ScenarioCorpus:
-    """Load and hash-check the one existing frozen corpus hierarchy."""
+def load_scenario_corpus(root: Path, spec: CorpusSpec = FROZEN_CORPUS) -> ScenarioCorpus:
+    """Load and hash-check one frozen corpus hierarchy (the original one by default)."""
 
-    with _opened_corpus_directory(root) as corpus_descriptor:
+    expected_ids = spec.scenario_ids
+    with _opened_corpus_directory(root, spec.relative_root) as corpus_descriptor:
         opened_files: dict[str, os.stat_result] = {}
         manifest_bytes, manifest_metadata = _read_regular_corpus_file(
             corpus_descriptor, "manifest.json"
@@ -278,7 +300,7 @@ def load_scenario_corpus(root: Path) -> ScenarioCorpus:
             raise TargetValidationError("corpus manifest fields do not match v0.1.0")
         if (
             manifest["schema_version"] != "0.1.0"
-            or manifest["corpus_id"] != "AG-THREAT-CORPUS"
+            or manifest["corpus_id"] != spec.corpus_id
             or manifest["version"] != "0.1.0"
             or manifest["frozen"] is not True
             or manifest["provenance"] != "authored_for_strands_agentguard"
@@ -295,14 +317,16 @@ def load_scenario_corpus(root: Path) -> ScenarioCorpus:
         count = manifest["scenario_count"]
         if isinstance(count, bool) or not isinstance(count, int) or not isinstance(entries, list):
             raise TargetValidationError("corpus manifest count or entries are invalid")
-        if count != len(_EXPECTED_CORPUS_SCENARIO_IDS) or len(entries) != count:
+        if count != len(expected_ids) or len(entries) != count:
+            count_word = {10: "ten", 8: "eight"}.get(len(expected_ids), str(len(expected_ids)))
             raise TargetValidationError(
-                "corpus manifest must contain exactly the ten frozen v0.1.0 scenarios"
+                f"corpus manifest must contain exactly the {count_word} frozen scenarios "
+                f"of {spec.corpus_id}"
             )
 
         validated_entries: list[tuple[str, str, str, str]] = []
         expected_paths: set[str] = set()
-        for entry, expected_scenario_id in zip(entries, _EXPECTED_CORPUS_SCENARIO_IDS, strict=True):
+        for entry, expected_scenario_id in zip(entries, expected_ids, strict=True):
             if not isinstance(entry, dict) or set(entry) != {"scenario_id", "path", "sha256"}:
                 raise TargetValidationError("corpus entry fields do not match v0.1.0")
             scenario_id = entry["scenario_id"]
@@ -314,9 +338,10 @@ def load_scenario_corpus(root: Path) -> ScenarioCorpus:
                 raise TargetValidationError("corpus entry values must be strings")
             if scenario_id != expected_scenario_id:
                 raise TargetValidationError(
-                    "corpus scenarios must be exactly AG-SCN-001 through AG-SCN-010 in order"
+                    f"corpus scenarios must be exactly {expected_ids[0]} "
+                    f"through {expected_ids[-1]} in order"
                 )
-            expected_path = f"fixtures/scenarios/v0.1.0/{scenario_id.lower()}.json"
+            expected_path = f"{spec.relative_root.as_posix()}/{scenario_id.lower()}.json"
             path_parts = path_value.split("/")
             if (
                 path_value.startswith("/")
@@ -619,7 +644,10 @@ class DeterministicTarget:
 
 
 __all__ = [
+    "FROZEN_CORPUS",
+    "MVP_CORPUS",
     "SUPPORTED_SCENARIO_IDS",
+    "CorpusSpec",
     "DeclaredTool",
     "DeterministicTarget",
     "ScenarioCorpus",

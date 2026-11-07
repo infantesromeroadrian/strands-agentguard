@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "report-meta.schema.json",
+  "title": "AgentGuard report metadata",
+  "description": "Side document of report.json: target and model identity, payload set, repetitions, per-scenario k/n and OWASP mapping. Links to report.json by SHA-256.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "agentguard_version", "run_id", "report_sha256", "target", "corpus",
+    "payload_set", "repetitions", "scenarios", "false_positives", "limitations"
+  ],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "agentguard_version": {"type": "string"},
+    "run_id": {"type": "string", "minLength": 1},
+    "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target_id"],
+      "properties": {
+        "kind": {"enum": ["deterministic", "strands-ollama"]},
+        "target_id": {"type": "string"},
+        "profile": {"enum": ["baseline", "hardened"]},
+        "controls": {"type": "object", "additionalProperties": true},
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model_id", "temperature", "seed", "digest", "ollama_version", "strands_version"],
+          "properties": {
+            "provider": {"const": "ollama"},
+            "model_id": {"type": "string"},
+            "temperature": {"type": "number"},
+            "seed": {"type": "integer"},
+            "digest": {"type": ["string", "null"]},
+            "ollama_version": {"type": ["string", "null"]},
+            "strands_version": {"type": "string"}
+          }
+        }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["corpus_id", "version", "manifest_sha256"],
+      "properties": {
+        "corpus_id": {"type": "string"},
+        "version": {"type": "string"},
+        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "payload_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payload_set_id", "kind", "sha256"],
+      "properties": {
+        "payload_set_id": {"type": "string"},
+        "kind": {"enum": ["neutral", "adversarial"]},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "fallback_payload_set_id": {"type": ["string", "null"]}
+      }
+    },
+    "repetitions": {"type": "integer", "minimum": 1},
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenario_id", "title", "kind", "severity", "trials", "failures", "detected",
+          "failure_rate", "failure_modes", "owasp_llm_2025", "owasp_agentic_2026"
+        ],
+        "properties": {
+          "scenario_id": {"type": "string", "pattern": "^AG-SCN-[0-9]{3}$"},
+          "title": {"type": "string"},
+          "kind": {"enum": ["benign", "adversarial"]},
+          "severity": {"enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]},
+          "trials": {"type": "integer", "minimum": 1},
+          "failures": {"type": "integer", "minimum": 0},
+          "detected": {"type": "boolean"},
+          "failure_rate": {"type": "number", "minimum": 0, "maximum": 1},
+          "failure_modes": {
+            "type": "object",
+            "additionalProperties": {"type": "integer", "minimum": 1}
+          },
+          "owasp_llm_2025": {"type": "array", "items": {"type": "string", "pattern": "^LLM(0[1-9]|10):2025$"}},
+          "owasp_agentic_2026": {"type": "array", "items": {"type": "string", "pattern": "^ASI(0[1-9]|10)$"}}
+        }
+      }
+    },
+    "false_positives": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "trials", "blocked", "rate"],
+      "properties": {
+        "scenario_id": {"type": ["string", "null"]},
+        "trials": {"type": "integer", "minimum": 0},
+        "blocked": {"type": "integer", "minimum": 0},
+        "rate": {"type": ["number", "null"]}
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  }
+}
