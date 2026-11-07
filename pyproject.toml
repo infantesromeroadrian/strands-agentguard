@@ -23,6 +23,9 @@ api = [
 eval = [
     "strands-agents-evals>=1.0.3,<2",
 ]
+ollama = [
+    "ollama>=0.4.8,<1",
+]
 
 [dependency-groups]
 quality = [
@@ -73,6 +76,13 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long prose string literals (catalog text, report lines, scenario spec tables).
+"scripts/build_mvp_corpus.py" = ["E501"]
+"src/strands_agentguard/assessment/catalog.py" = ["E501"]
+"src/strands_agentguard/assessment/runner.py" = ["E501"]
+"src/strands_agentguard/assessment/strands_target.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
