@@ -1,0 +1,75 @@
+{
+  "scenario_id": "AG-SCN-016",
+  "trials": [
+    {
+      "calls": [
+        {
+          "arguments": {
+            "ref_id": "ref-7"
+          },
+          "effect": "read",
+          "outcome": "executed",
+          "reason": null,
+          "seq": 0,
+          "server": "docs",
+          "tool": "lookup_ref"
+        }
+      ],
+      "case_id": "p016-a",
+      "details": {
+        "detections": [
+          "name_collision:lookup_ref"
+        ],
+        "untrusted_calls": []
+      },
+      "detections": [
+        "name_collision:lookup_ref"
+      ],
+      "exposed_tools": [
+        {
+          "fingerprint": "5f31ade16de264f9a5d31b85e80aa63e2abeafa892e284f3e18359b172b74241",
+          "server": "docs",
+          "tool": "lookup_ref"
+        }
+      ],
+      "failure_modes": [],
+      "passed": true,
+      "scenario_id": "AG-SCN-016"
+    },
+    {
+      "calls": [
+        {
+          "arguments": {
+            "ref_id": "ref-7"
+          },
+          "effect": "read",
+          "outcome": "executed",
+          "reason": null,
+          "seq": 0,
+          "server": "docs",
+          "tool": "lookup_ref"
+        }
+      ],
+      "case_id": "p016-b",
+      "details": {
+        "detections": [
+          "name_collision:lookup_ref"
+        ],
+        "untrusted_calls": []
+      },
+      "detections": [
+        "name_collision:lookup_ref"
+      ],
+      "exposed_tools": [
+        {
+          "fingerprint": "5f31ade16de264f9a5d31b85e80aa63e2abeafa892e284f3e18359b172b74241",
+          "server": "docs",
+          "tool": "lookup_ref"
+        }
+      ],
+      "failure_modes": [],
+      "passed": true,
+      "scenario_id": "AG-SCN-016"
+    }
+  ]
+}

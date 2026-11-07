@@ -1,0 +1,128 @@
+{
+  "artifact_hashes": {
+    "evidence/ag-scn-011.json": "a0f0af87f3849cb186b60593f4092720216ae9e52c15d3f76424c51767929674",
+    "evidence/ag-scn-012.json": "e74c9acdb87125c00b5cabf1ad926042bb6f6e5dd15ee9231903a4e1ddf60e08",
+    "evidence/ag-scn-013.json": "c2486035a0801568e479aa8dbf0b18a129cf14a8637c6b0b03a0b2a3ba273717",
+    "evidence/ag-scn-014.json": "df961cc696c98aa27308b6755d538f9852965413f88ccc52e5bdb01978f060a7",
+    "evidence/ag-scn-015.json": "2d9f9c849b5c6943af18098b30badeda59383d39b6365aff4191996122794a20",
+    "evidence/ag-scn-016.json": "e58224053327adc5c477a432919e0848db9f2111369441a39c0cc72b72e1283d",
+    "evidence/ag-scn-017.json": "c64328ddeb1fd00d9f672d401a14055c5b4d5e872558446e3e075847611ff8c3",
+    "evidence/ag-scn-018.json": "1545e53b4447f028f502ce2a38df319950c966a35bd124c059a0fbaec7dd6d52"
+  },
+  "findings": [],
+  "metrics": {
+    "scenarios_failed": 0,
+    "scenarios_total": 8,
+    "trials_failed": 0,
+    "trials_total": 16
+  },
+  "run_identity": {
+    "agentguard_candidate": "fixture:agentguard:36eef8b3afb4f0763f23eef827003fdee138115e18269e4890fb9031954bf60f",
+    "architecture": "x86_64",
+    "config_sha256": "aed72592a58e2cae6f98b9c203b79ba8a5b8a41abe17fd9b779497d5a47ff798",
+    "identity_digest": "ea8c0d1a56b526cfd9a80e096bb48ae507446286fb5a377422ed8d5c78a43311",
+    "ignored_oid": "e69de29bb2d1d6434b8b29ae775ad8e2e48c5391",
+    "lock_sha256": "75ca286ae858378f5d6777c130c8cad132efe2e02debbf4de78ad1f5ea088b0a",
+    "manifest_sha256": "cabe1f067185463b1a0211fbf40de65ed6823c321d1580aecec68fbad0619cba",
+    "os": "linux",
+    "python": "3.12.13",
+    "run_id": "run-aed72592a58e2cae",
+    "schema_version": "0.1.0",
+    "target_candidate": "fixture:hardened:0cb04acda3359542d05d0f322e2af0a1592178e14f9f5a343cc29153db673f25",
+    "threat_catalog_sha256": "9eb102f03148d2cfd53d14d18dda4c60481335279b7b58d406dce4c3365e0994",
+    "threat_catalog_version": "0.1.0"
+  },
+  "scenario_results": [
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-011.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-011"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-012.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-012"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-013.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-013"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-014.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-014"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-015.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-015"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-016.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-016"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-017.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-017"
+    },
+    {
+      "completed": true,
+      "evidence_refs": [
+        "evidence/ag-scn-018.json"
+      ],
+      "finding_ids": [],
+      "incomplete_reason": null,
+      "passed": true,
+      "scenario_id": "AG-SCN-018"
+    }
+  ],
+  "schema_version": "0.1.0",
+  "stop_reason": "assessment completed",
+  "summary": {
+    "completed": true,
+    "incomplete_reason": null
+  },
+  "target_id": "synthetic-agentguard",
+  "timestamps": {
+    "completed_at": "2026-11-07T20:13:21.564208+00:00",
+    "started_at": "2026-11-07T20:13:21.557952+00:00"
+  }
+}
