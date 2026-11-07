@@ -1,6 +1,9 @@
 """Bounded synthetic targets for offline AgentGuard checks."""
 
 from .deterministic import (
+    FROZEN_CORPUS,
+    MVP_CORPUS,
+    CorpusSpec,
     DeclaredTool,
     DeterministicTarget,
     ScenarioCorpus,
@@ -19,6 +22,9 @@ from .identity import (
 )
 
 __all__ = [
+    "FROZEN_CORPUS",
+    "MVP_CORPUS",
+    "CorpusSpec",
     "DeclaredTool",
     "DeterministicTarget",
     "FixtureIdentityError",

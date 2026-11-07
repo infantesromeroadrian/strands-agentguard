@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1.0",
+  "corpus_id": "AG-MVP-CORPUS",
+  "version": "0.1.0",
+  "frozen": true,
+  "frozen_at": "2026-11-07T00:00:00Z",
+  "provenance": "authored_for_strands_agentguard",
+  "confidence": "designed_not_executed",
+  "synthetic": true,
+  "real_data": false,
+  "scenario_schema": "schemas/scenario.schema.json",
+  "scenario_count": 8,
+  "scenarios": [
+    {
+      "scenario_id": "AG-SCN-011",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-011.json",
+      "sha256": "7f8df4ee94ed2b89a6a933ec664dc4bb627e1f29ed4758d86ec2dd02fc067b31"
+    },
+    {
+      "scenario_id": "AG-SCN-012",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-012.json",
+      "sha256": "58711aaea7c7165dc3f403698a0214d586dd60dd217c037d69cf562128d4895d"
+    },
+    {
+      "scenario_id": "AG-SCN-013",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-013.json",
+      "sha256": "38f75aedc368872731226aeebbeb3f6101fb093636ddf00282f11ae6ad28be1e"
+    },
+    {
+      "scenario_id": "AG-SCN-014",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-014.json",
+      "sha256": "7ce3b9fb2e7c721ca3fb02e27e093a07b6b502f4ca0e8161685285a97f5448c9"
+    },
+    {
+      "scenario_id": "AG-SCN-015",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-015.json",
+      "sha256": "04158120f7eeb260a0012b8b5fc8c8bb4d142f4bb9af625fc2587b8930db4ece"
+    },
+    {
+      "scenario_id": "AG-SCN-016",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-016.json",
+      "sha256": "9978e614280c4fb76db7c87035ba488e2cd13e97664d2e302317571e49fa823e"
+    },
+    {
+      "scenario_id": "AG-SCN-017",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-017.json",
+      "sha256": "664a0df163a6d60029089cc26e4844fc385ebb9feec8c77c39e7202ca20d3ee7"
+    },
+    {
+      "scenario_id": "AG-SCN-018",
+      "path": "fixtures/scenarios/mvp-v0.1.0/ag-scn-018.json",
+      "sha256": "bdf9b2a582b432576077b4f021f16e78e01b5623dd322cd207e1099e82f5f45c"
+    }
+  ]
+}

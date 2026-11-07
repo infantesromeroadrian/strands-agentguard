@@ -1,0 +1,17 @@
+# Allowlist of MCP servers that `agentguard inventory <id>` may launch.
+#
+# WARNING: a registered entry runs `command` with `args` as a LOCAL PROCESS under your account
+# every time you call `agentguard inventory <id>`. Register only servers you own or are
+# authorised to assess. Nothing outside this list (and the built-in `synthetic-audit`) is ever run.
+#
+# Copy to ./agentguard.toml (loaded by default) or pass --config <path>.
+# Limits: file <= 16 KiB, <= 16 servers, unique ids, timeout 1-60 s.
+# Environment: the child gets only the MCP SDK's small safe default set plus what you list here.
+
+[[servers]]
+id = "my-server"                       # lowercase id used on the command line
+command = "python"
+args = ["-m", "my_server"]
+env = { MY_SERVER_MODE = "readonly" }  # literal values only
+env_passthrough = []                   # names of variables copied from your shell, e.g. ["MY_API_KEY"]
+timeout_seconds = 15

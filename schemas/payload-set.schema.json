@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "payload-set.schema.json",
+  "title": "AgentGuard untrusted-content payload set",
+  "description": "Text injected into the untrusted channel of a scenario (tool output, MCP resource, tool description). The neutral set only carries inert markers; an adversarial set is authored separately and used with real-model targets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "payload_set_id", "kind", "cases"],
+  "properties": {
+    "schema_version": {"const": "0.1.0"},
+    "payload_set_id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"},
+    "kind": {"enum": ["neutral", "adversarial"]},
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case_id", "scenario_id", "text"],
+        "properties": {
+          "case_id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"},
+          "scenario_id": {"type": "string", "pattern": "^AG-SCN-[0-9]{3}$"},
+          "text": {"type": "string", "minLength": 1, "maxLength": 2000}
+        }
+      }
+    }
+  }
+}

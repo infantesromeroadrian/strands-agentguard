@@ -44,6 +44,8 @@ _SCHEMA_NAMES = frozenset(
         "assessment-result.schema.json",
         "corpus-manifest.schema.json",
         "finding.schema.json",
+        "payload-set.schema.json",
+        "report-meta.schema.json",
         "run-identity.schema.json",
         "scenario.schema.json",
         "target-manifest.schema.json",

@@ -61,7 +61,7 @@ from .targets import (
     validate_fixture_identity,
 )
 
-__version__ = "0.0.0"
+__version__ = "0.1.0"
 
 __all__ = [
     "LOCAL_TOOL_DEFINITIONS",

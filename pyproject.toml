@@ -1,6 +1,6 @@
 [project]
 name = "strands-agentguard"
-version = "0.0.0"
+version = "0.1.0"
 description = "Reproducible security assessment harness for Strands agents, tools, and MCP servers."
 requires-python = ">=3.12,<3.13"
 license = "Apache-2.0"
@@ -22,6 +22,9 @@ api = [
 ]
 eval = [
     "strands-agents-evals>=1.0.3,<2",
+]
+ollama = [
+    "ollama>=0.4.8,<1",
 ]
 
 [dependency-groups]
@@ -73,6 +76,13 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long prose string literals (catalog text, report lines, scenario spec tables).
+"scripts/build_mvp_corpus.py" = ["E501"]
+"src/strands_agentguard/assessment/catalog.py" = ["E501"]
+"src/strands_agentguard/assessment/runner.py" = ["E501"]
+"src/strands_agentguard/assessment/strands_target.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
